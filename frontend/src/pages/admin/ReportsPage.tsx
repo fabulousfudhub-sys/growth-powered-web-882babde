@@ -220,6 +220,7 @@ export default function ReportsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
               <Label>School</Label>
               <Select
                 value={school}
