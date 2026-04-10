@@ -256,6 +256,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
       endDate: "",
       endTime: "",
       instructions: "",
+      examType: "exam",
+      caNumber: "1",
     });
   };
 
