@@ -60,6 +60,7 @@ export default function AddCourseDialog({ open, onOpenChange }: Props) {
             <div className="space-y-2"><Label>Exam Weight (%)</Label><Input type="number" value={form.examWeight} onChange={e => { update('examWeight', e.target.value); update('caWeight', String(100 - parseFloat(e.target.value || '0'))); }} /></div>
             <div className="space-y-2"><Label>Max CAs</Label><Select value={form.maxCas} onValueChange={v => update('maxCas', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[1,2,3,4,5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent></Select></div>
           </div>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleAdd} disabled={!form.code.trim() || !form.title.trim() || !form.departmentId}>Add Course</Button>
