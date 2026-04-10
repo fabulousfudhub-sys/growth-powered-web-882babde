@@ -205,16 +205,17 @@ router.get('/courses', authenticate, async (req, res) => {
 });
 
 router.post('/courses', authenticate, requireRole('super_admin', 'admin', 'examiner'), async (req, res) => {
-  const { code, title, departmentId, schoolId, programme, level, instructorId } = req.body;
+  const { code, title, departmentId, schoolId, programme, level, instructorId, caWeight, examWeight, maxCas } = req.body;
   try {
     if (!departmentId) return res.status(400).json({ error: 'departmentId is required' });
     const { rows: depts } = await pool.query(`SELECT school_id FROM departments WHERE id = $1`, [departmentId]);
     if (depts.length === 0) return res.status(400).json({ error: 'Invalid departmentId' });
     const finalSchoolId = depts[0].school_id;
     const { rows } = await pool.query(
-      `INSERT INTO courses (code, title, department_id, school_id, programme, level, instructor_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [code, title, departmentId, finalSchoolId, programme || null, level || null, instructorId || null]
+      `INSERT INTO courses (code, title, department_id, school_id, programme, level, instructor_id, ca_weight, exam_weight, max_cas)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [code, title, departmentId, finalSchoolId, programme || null, level || null, instructorId || null,
+       caWeight || 30, examWeight || 70, maxCas || 1]
     );
     res.status(201).json({ id: rows[0].id });
   } catch (err) {
@@ -224,7 +225,7 @@ router.post('/courses', authenticate, requireRole('super_admin', 'admin', 'exami
 });
 
 router.put('/courses/:id', authenticate, requireRole('super_admin', 'admin', 'examiner'), async (req, res) => {
-  const { code, title, departmentId, schoolId, programme, level, instructorId } = req.body;
+  const { code, title, departmentId, schoolId, programme, level, instructorId, caWeight, examWeight, maxCas } = req.body;
   try {
     let finalSchoolId = schoolId;
     if (!finalSchoolId && departmentId) {
@@ -232,8 +233,9 @@ router.put('/courses/:id', authenticate, requireRole('super_admin', 'admin', 'ex
       if (depts.length > 0) finalSchoolId = depts[0].school_id;
     }
     await pool.query(
-      `UPDATE courses SET code=$1, title=$2, department_id=$3, school_id=$4, programme=$5, level=$6, instructor_id=$7 WHERE id=$8`,
-      [code, title, departmentId, finalSchoolId, programme || null, level || null, instructorId || null, req.params.id]
+      `UPDATE courses SET code=$1, title=$2, department_id=$3, school_id=$4, programme=$5, level=$6, instructor_id=$7, ca_weight=$8, exam_weight=$9, max_cas=$10 WHERE id=$11`,
+      [code, title, departmentId, finalSchoolId, programme || null, level || null, instructorId || null,
+       caWeight || 30, examWeight || 70, maxCas || 1, req.params.id]
     );
     res.json({ success: true });
   } catch (err) {
