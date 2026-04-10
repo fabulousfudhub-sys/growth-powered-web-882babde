@@ -567,12 +567,30 @@ export default function StudentExamPortal() {
                     <ChevronLeft className="w-4 h-4" /> Previous
                   </Button>
                   {isLastQuestion ? (
-                    <Button
-                      onClick={attemptSubmit}
-                      className="gap-1 bg-success hover:bg-success/90 text-success-foreground"
-                    >
-                      <Send className="w-4 h-4" /> Submit Exam
-                    </Button>
+                    canSubmit ? (
+                      <Button
+                        onClick={attemptSubmit}
+                        className="gap-1 bg-success hover:bg-success/90 text-success-foreground"
+                      >
+                        <Send className="w-4 h-4" /> Submit Exam
+                      </Button>
+                    ) : (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span tabIndex={0}>
+                            <Button
+                              disabled
+                              className="gap-1 opacity-50 cursor-not-allowed"
+                            >
+                              <Lock className="w-4 h-4" /> Submit Exam
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-center">
+                          <p>{submitDisabledReason}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )
                   ) : (
                     <Button
                       onClick={() => navigateQuestion(currentQ + 1)}
