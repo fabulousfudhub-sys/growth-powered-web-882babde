@@ -95,6 +95,7 @@ export default function EditCourseDialog({ open, onOpenChange, course }: Props) 
               </Select>
             </div>
           </div>
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving}>{saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save Changes</Button>
