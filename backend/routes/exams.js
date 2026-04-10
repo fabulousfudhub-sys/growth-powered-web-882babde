@@ -38,6 +38,7 @@ router.get('/', authenticate, async (req, res) => {
       startDate: r.start_date, endDate: r.end_date, status: r.status,
       instructions: r.instructions, enrolledStudents: parseInt(r.enrolled_students),
       createdBy: r.created_by, pinMode: r.pin_mode, sharedPin: r.shared_pin,
+      examType: r.exam_type || 'exam', caNumber: r.ca_number || 1,
     })));
   } catch (err) {
     console.error('Get exams error:', err);
@@ -74,6 +75,7 @@ router.get('/:id', authenticate, async (req, res) => {
       startDate: r.start_date, endDate: r.end_date, status: r.status,
       instructions: r.instructions, enrolledStudents,
       createdBy: r.created_by, pinMode: r.pin_mode, sharedPin: r.shared_pin,
+      examType: r.exam_type || 'exam', caNumber: r.ca_number || 1,
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch exam' });
