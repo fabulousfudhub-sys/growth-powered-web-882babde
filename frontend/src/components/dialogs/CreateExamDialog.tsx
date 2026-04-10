@@ -209,6 +209,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
             : undefined,
         instructions: form.instructions,
         carryoverStudentIds: carryoverStudents.map((s) => s.id),
+        examType: form.examType,
+        caNumber: form.examType === "ca" ? parseInt(form.caNumber) : undefined,
       });
       setQuestionsAssigned(result.questionsAssigned || 0);
 
