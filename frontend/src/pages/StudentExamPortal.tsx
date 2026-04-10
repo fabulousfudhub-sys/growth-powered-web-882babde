@@ -23,7 +23,9 @@ import {
   CheckCircle,
   Send,
   GraduationCap,
+  Lock,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ExamTimer from "@/components/exam/ExamTimer";
 import QuestionRenderer from "@/components/exam/QuestionRenderer";
 import QuestionNavigation from "@/components/exam/QuestionNavigation";
@@ -326,6 +328,19 @@ export default function StudentExamPortal() {
   ).length;
   const isLastQuestion = currentQ === questions.length - 1;
 
+  // Submit restrictions: 80% answered + 50% time elapsed
+  const answeredPercent = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
+  const timeElapsed = totalDuration - timeLeft;
+  const timeElapsedPercent = totalDuration > 0 ? (timeElapsed / totalDuration) * 100 : 0;
+  const canSubmit = answeredPercent >= 80 && timeElapsedPercent >= 50;
+  const submitDisabledReason = !canSubmit
+    ? answeredPercent < 80 && timeElapsedPercent < 50
+      ? `Answer at least 80% of questions (${answeredCount}/${Math.ceil(questions.length * 0.8)}) and wait until 50% of exam time has elapsed`
+      : answeredPercent < 80
+        ? `Answer at least 80% of questions (${answeredCount}/${Math.ceil(questions.length * 0.8)} answered)`
+        : `Wait until 50% of exam time has elapsed (${Math.round(timeElapsedPercent)}% elapsed)`
+    : "";
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -552,12 +567,30 @@ export default function StudentExamPortal() {
                     <ChevronLeft className="w-4 h-4" /> Previous
                   </Button>
                   {isLastQuestion ? (
-                    <Button
-                      onClick={attemptSubmit}
-                      className="gap-1 bg-success hover:bg-success/90 text-success-foreground"
-                    >
-                      <Send className="w-4 h-4" /> Submit Exam
-                    </Button>
+                    canSubmit ? (
+                      <Button
+                        onClick={attemptSubmit}
+                        className="gap-1 bg-success hover:bg-success/90 text-success-foreground"
+                      >
+                        <Send className="w-4 h-4" /> Submit Exam
+                      </Button>
+                    ) : (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span tabIndex={0}>
+                            <Button
+                              disabled
+                              className="gap-1 opacity-50 cursor-not-allowed"
+                            >
+                              <Lock className="w-4 h-4" /> Submit Exam
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-center">
+                          <p>{submitDisabledReason}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )
                   ) : (
                     <Button
                       onClick={() => navigateQuestion(currentQ + 1)}

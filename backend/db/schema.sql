@@ -61,6 +61,9 @@ CREATE TABLE courses (
   programme VARCHAR(100),
   level VARCHAR(10),
   instructor_id UUID REFERENCES users(id),
+  ca_weight NUMERIC(5,2) DEFAULT 30, -- percentage for CA (e.g. 30%)
+  exam_weight NUMERIC(5,2) DEFAULT 70, -- percentage for Exam (e.g. 70%)
+  max_cas INTEGER DEFAULT 1, -- how many CAs allowed
   synced BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -83,6 +86,8 @@ CREATE TABLE questions (
 );
 
 -- ── Exams ──
+CREATE TYPE exam_type AS ENUM ('exam', 'ca');
+
 CREATE TABLE exams (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title VARCHAR(255) NOT NULL,
@@ -101,6 +106,8 @@ CREATE TABLE exams (
   instructions TEXT,
   pin_mode VARCHAR(20) NOT NULL DEFAULT 'individual',
   shared_pin VARCHAR(8),
+  exam_type exam_type NOT NULL DEFAULT 'exam',
+  ca_number INTEGER DEFAULT 1, -- CA1, CA2, etc.
   created_by UUID REFERENCES users(id),
   synced BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { School, Department, ExamAttempt } from "@/lib/types";
+import type { School, Department, ExamAttempt, Course } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,11 +38,16 @@ interface ReportRow {
   totalMarks: number | undefined;
   status: string;
   submittedAt: string;
+  examType: string;
+  caNumber: number;
+  department: string;
+  level: string;
 }
 
 export default function ReportsPage() {
   const [school, setSchool] = useState("all");
   const [department, setDepartment] = useState("all");
+  const [courseFilter, setCourseFilter] = useState("all");
   const [reportType, setReportType] = useState("");
   const [exportFormat, setExportFormat] = useState("csv");
   const [schools, setSchools] = useState<School[]>([]);
@@ -51,20 +56,13 @@ export default function ReportsPage() {
   const [reportData, setReportData] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
 
   useEffect(() => {
-    api
-      .getSchools()
-      .then(setSchools)
-      .catch(() => {});
-    api
-      .getDepartments()
-      .then(setDepartments)
-      .catch(() => {});
-    api
-      .getDashboardStats()
-      .then(setStats)
-      .catch(() => {});
+    api.getSchools().then(setSchools).catch(() => {});
+    api.getDepartments().then(setDepartments).catch(() => {});
+    api.getDashboardStats().then(setStats).catch(() => {});
+    api.getCourses().then(setCourses).catch(() => {});
   }, []);
 
   const filteredDepts =
@@ -89,8 +87,14 @@ export default function ReportsPage() {
         totalMarks: a.totalMarks,
         status: a.status,
         submittedAt: a.submittedAt || a.startedAt,
+        examType: a.examType || "exam",
+        caNumber: a.caNumber || 1,
+        department: a.department || "—",
+        level: a.level || "—",
       }));
-      setReportData(rows);
+      // Apply course filter
+      const filtered = courseFilter === "all" ? rows : rows.filter(r => r.courseCode === courseFilter);
+      setReportData(filtered);
       setGenerated(true);
       toast.success(
         `${reportType.replace("_", " ")} report generated with ${rows.length} records`,
@@ -205,7 +209,17 @@ export default function ReportsPage() {
           <CardTitle className="text-base">Generate Report</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label>Course</Label>
+              <Select value={courseFilter} onValueChange={setCourseFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Courses</SelectItem>
+                  {courses.map(c => <SelectItem key={c.id} value={c.code}>{c.code} - {c.title}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>School</Label>
               <Select

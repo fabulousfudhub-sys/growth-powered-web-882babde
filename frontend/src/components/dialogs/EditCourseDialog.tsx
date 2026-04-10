@@ -16,7 +16,7 @@ interface Props {
 }
 
 export default function EditCourseDialog({ open, onOpenChange, course }: Props) {
-  const [form, setForm] = useState({ code: '', title: '', departmentId: '', level: '', instructorId: '' });
+  const [form, setForm] = useState({ code: '', title: '', departmentId: '', level: '', instructorId: '', caWeight: '30', examWeight: '70', maxCas: '1' });
   const [departments, setDepartments] = useState<Department[]>([]);
   const [instructors, setInstructors] = useState<User[]>([]);
   const [saving, setSaving] = useState(false);
@@ -31,6 +31,9 @@ export default function EditCourseDialog({ open, onOpenChange, course }: Props) 
           code: course.code, title: course.title,
           departmentId: match?.id || '', level: course.level || '',
           instructorId: course.instructorId || '',
+          caWeight: String(course.caWeight ?? 30),
+          examWeight: String(course.examWeight ?? 70),
+          maxCas: String(course.maxCas ?? 1),
         });
       });
       api.getInstructors().then(setInstructors);
@@ -47,6 +50,9 @@ export default function EditCourseDialog({ open, onOpenChange, course }: Props) 
         code: form.code, title: form.title,
         departmentId: form.departmentId, schoolId: '',
         level: form.level, instructorId: form.instructorId || undefined,
+        caWeight: parseFloat(form.caWeight),
+        examWeight: parseFloat(form.examWeight),
+        maxCas: parseInt(form.maxCas),
       });
       toast.success('Course updated');
       onOpenChange(false);
@@ -77,6 +83,17 @@ export default function EditCourseDialog({ open, onOpenChange, course }: Props) 
               <SelectTrigger><SelectValue placeholder="Select instructor" /></SelectTrigger>
               <SelectContent>{instructors.map(i => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}</SelectContent>
             </Select>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2"><Label>CA Weight (%)</Label><Input type="number" value={form.caWeight} onChange={e => { update('caWeight', e.target.value); update('examWeight', String(100 - parseFloat(e.target.value || '0'))); }} /></div>
+            <div className="space-y-2"><Label>Exam Weight (%)</Label><Input type="number" value={form.examWeight} onChange={e => { update('examWeight', e.target.value); update('caWeight', String(100 - parseFloat(e.target.value || '0'))); }} /></div>
+            <div className="space-y-2">
+              <Label>Max CAs</Label>
+              <Select value={form.maxCas} onValueChange={v => update('maxCas', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{[1,2,3,4,5].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
         <DialogFooter>

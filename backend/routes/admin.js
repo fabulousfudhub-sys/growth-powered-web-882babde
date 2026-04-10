@@ -187,28 +187,35 @@ router.get('/courses', authenticate, async (req, res) => {
   try {
     const { departmentId } = req.query;
     let query = `SELECT c.id, c.code, c.title, d.name as department, s.name as school,
-                        c.programme, c.level, u.name as instructor, c.instructor_id as "instructorId"
+                        c.programme, c.level, u.name as instructor, c.instructor_id as "instructorId",
+                        c.ca_weight as "caWeight", c.exam_weight as "examWeight", c.max_cas as "maxCas"
                  FROM courses c JOIN departments d ON c.department_id = d.id
                  JOIN schools s ON c.school_id = s.id LEFT JOIN users u ON c.instructor_id = u.id`;
     const params = [];
     if (departmentId) { params.push(departmentId); query += ` WHERE c.department_id = $1`; }
     query += ' ORDER BY c.code';
     const { rows } = await pool.query(query, params);
-    res.json(rows);
+    res.json(rows.map(r => ({
+      ...r,
+      caWeight: r.caWeight ? parseFloat(r.caWeight) : 30,
+      examWeight: r.examWeight ? parseFloat(r.examWeight) : 70,
+      maxCas: r.maxCas || 1,
+    })));
   } catch (err) { res.status(500).json({ error: 'Failed to fetch courses' }); }
 });
 
 router.post('/courses', authenticate, requireRole('super_admin', 'admin', 'examiner'), async (req, res) => {
-  const { code, title, departmentId, schoolId, programme, level, instructorId } = req.body;
+  const { code, title, departmentId, schoolId, programme, level, instructorId, caWeight, examWeight, maxCas } = req.body;
   try {
     if (!departmentId) return res.status(400).json({ error: 'departmentId is required' });
     const { rows: depts } = await pool.query(`SELECT school_id FROM departments WHERE id = $1`, [departmentId]);
     if (depts.length === 0) return res.status(400).json({ error: 'Invalid departmentId' });
     const finalSchoolId = depts[0].school_id;
     const { rows } = await pool.query(
-      `INSERT INTO courses (code, title, department_id, school_id, programme, level, instructor_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [code, title, departmentId, finalSchoolId, programme || null, level || null, instructorId || null]
+      `INSERT INTO courses (code, title, department_id, school_id, programme, level, instructor_id, ca_weight, exam_weight, max_cas)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [code, title, departmentId, finalSchoolId, programme || null, level || null, instructorId || null,
+       caWeight || 30, examWeight || 70, maxCas || 1]
     );
     res.status(201).json({ id: rows[0].id });
   } catch (err) {
@@ -218,7 +225,7 @@ router.post('/courses', authenticate, requireRole('super_admin', 'admin', 'exami
 });
 
 router.put('/courses/:id', authenticate, requireRole('super_admin', 'admin', 'examiner'), async (req, res) => {
-  const { code, title, departmentId, schoolId, programme, level, instructorId } = req.body;
+  const { code, title, departmentId, schoolId, programme, level, instructorId, caWeight, examWeight, maxCas } = req.body;
   try {
     let finalSchoolId = schoolId;
     if (!finalSchoolId && departmentId) {
@@ -226,8 +233,9 @@ router.put('/courses/:id', authenticate, requireRole('super_admin', 'admin', 'ex
       if (depts.length > 0) finalSchoolId = depts[0].school_id;
     }
     await pool.query(
-      `UPDATE courses SET code=$1, title=$2, department_id=$3, school_id=$4, programme=$5, level=$6, instructor_id=$7 WHERE id=$8`,
-      [code, title, departmentId, finalSchoolId, programme || null, level || null, instructorId || null, req.params.id]
+      `UPDATE courses SET code=$1, title=$2, department_id=$3, school_id=$4, programme=$5, level=$6, instructor_id=$7, ca_weight=$8, exam_weight=$9, max_cas=$10 WHERE id=$11`,
+      [code, title, departmentId, finalSchoolId, programme || null, level || null, instructorId || null,
+       caWeight || 30, examWeight || 70, maxCas || 1, req.params.id]
     );
     res.json({ success: true });
   } catch (err) {
@@ -243,18 +251,21 @@ router.delete('/courses/:id', authenticate, requireRole('super_admin', 'admin', 
   } catch (err) { res.status(500).json({ error: 'Failed to delete course' }); }
 });
 
-// Results — now includes student name and Reg. Number
+// Results — now includes student name, Reg. Number, and exam type
 router.get('/results', authenticate, async (req, res) => {
   try {
     const { examId } = req.query;
     let query = `SELECT ea.id, ea.exam_id as "examId", ea.student_id as "studentId",
                         u.name as "studentName", u.reg_number as "regNumber",
-                        e.title as "examTitle", c.code as "courseCode",
+                        e.title as "examTitle", c.code as "courseCode", c.id as "courseId",
+                        e.exam_type as "examType", e.ca_number as "caNumber",
+                        d.name as "department", e.level,
                         ea.started_at as "startedAt", ea.submitted_at as "submittedAt",
                         ea.score, ea.total_marks as "totalMarks", ea.status,
                         COALESCE((SELECT SUM(a.essay_score) FROM answers a WHERE a.attempt_id = ea.id AND a.essay_score IS NOT NULL), 0) as "essayScore"
                  FROM exam_attempts ea JOIN users u ON ea.student_id = u.id
                  JOIN exams e ON ea.exam_id = e.id JOIN courses c ON e.course_id = c.id
+                 JOIN departments d ON e.department_id = d.id
                  WHERE ea.status IN ('submitted', 'graded')`;
     const params = [];
     if (examId) { params.push(examId); query += ` AND ea.exam_id = $${params.length}`; }
@@ -265,6 +276,8 @@ router.get('/results', authenticate, async (req, res) => {
       score: r.score ? parseFloat(r.score) : undefined,
       totalMarks: r.totalMarks ? parseFloat(r.totalMarks) : undefined,
       essayScore: r.essayScore ? parseFloat(r.essayScore) : 0,
+      examType: r.examType || 'exam',
+      caNumber: r.caNumber || 1,
       answers: {},
       flaggedQuestions: [],
     })));

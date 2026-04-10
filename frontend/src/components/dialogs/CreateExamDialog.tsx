@@ -77,6 +77,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
     endDate: "",
     endTime: "",
     instructions: "",
+    examType: "exam" as "exam" | "ca",
+    caNumber: "1",
   });
 
   useEffect(() => {
@@ -207,6 +209,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
             : undefined,
         instructions: form.instructions,
         carryoverStudentIds: carryoverStudents.map((s) => s.id),
+        examType: form.examType,
+        caNumber: form.examType === "ca" ? parseInt(form.caNumber) : undefined,
       });
       setQuestionsAssigned(result.questionsAssigned || 0);
 
@@ -254,6 +258,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
       endDate: "",
       endTime: "",
       instructions: "",
+      examType: "exam",
+      caNumber: "1",
     });
   };
 
@@ -324,17 +330,40 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
         {/* Step 1: Course & Level */}
         {step === STEP_COURSE && (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>
-                Exam Title <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                placeholder="e.g. COM 101 - Introduction to Computing"
-                value={form.title}
-                onChange={(e) => update("title", e.target.value)}
-                required
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>
+                  Exam Title <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  placeholder="e.g. COM 101 - Introduction to Computing"
+                  value={form.title}
+                  onChange={(e) => update("title", e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Type <span className="text-destructive">*</span></Label>
+                <Select value={form.examType} onValueChange={(v) => update("examType", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="exam">Exam</SelectItem>
+                    <SelectItem value="ca">CA / Test</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            {form.examType === "ca" && (
+              <div className="space-y-2">
+                <Label>CA Number</Label>
+                <Select value={form.caNumber} onValueChange={(v) => update("caNumber", v)}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>CA {n}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>
                 Department <span className="text-destructive">*</span>

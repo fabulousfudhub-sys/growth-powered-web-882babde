@@ -436,6 +436,9 @@ export const api = {
     programme?: string;
     level?: string;
     instructorId?: string;
+    caWeight?: number;
+    examWeight?: number;
+    maxCas?: number;
   }): Promise<{ id: string }> {
     return request("/api/admin/courses", {
       method: "POST",
@@ -452,6 +455,9 @@ export const api = {
       programme?: string;
       level?: string;
       instructorId?: string;
+      caWeight?: number;
+      examWeight?: number;
+      maxCas?: number;
     },
   ): Promise<void> {
     await request(`/api/admin/courses/${id}`, {
@@ -493,6 +499,8 @@ export const api = {
     instructions?: string;
     carryoverStudentIds?: string[];
     pinMode?: string;
+    examType?: string;
+    caNumber?: number;
   }): Promise<{ id: string; questionsAssigned: number }> {
     return request("/api/exams", {
       method: "POST",

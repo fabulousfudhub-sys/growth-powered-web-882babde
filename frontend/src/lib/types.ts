@@ -42,6 +42,9 @@ export interface Course {
   level: string;
   instructor: string;
   instructorId?: string;
+  caWeight?: number;
+  examWeight?: number;
+  maxCas?: number;
 }
 
 export interface Question {
@@ -82,6 +85,8 @@ export interface Exam {
   createdBy: string;
   enrolledStudents: number;
   pins?: ExamPin[];
+  examType?: "exam" | "ca";
+  caNumber?: number;
 }
 
 export interface ExamAttempt {
