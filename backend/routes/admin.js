@@ -251,18 +251,21 @@ router.delete('/courses/:id', authenticate, requireRole('super_admin', 'admin', 
   } catch (err) { res.status(500).json({ error: 'Failed to delete course' }); }
 });
 
-// Results — now includes student name and Reg. Number
+// Results — now includes student name, Reg. Number, and exam type
 router.get('/results', authenticate, async (req, res) => {
   try {
     const { examId } = req.query;
     let query = `SELECT ea.id, ea.exam_id as "examId", ea.student_id as "studentId",
                         u.name as "studentName", u.reg_number as "regNumber",
-                        e.title as "examTitle", c.code as "courseCode",
+                        e.title as "examTitle", c.code as "courseCode", c.id as "courseId",
+                        e.exam_type as "examType", e.ca_number as "caNumber",
+                        d.name as "department", e.level,
                         ea.started_at as "startedAt", ea.submitted_at as "submittedAt",
                         ea.score, ea.total_marks as "totalMarks", ea.status,
                         COALESCE((SELECT SUM(a.essay_score) FROM answers a WHERE a.attempt_id = ea.id AND a.essay_score IS NOT NULL), 0) as "essayScore"
                  FROM exam_attempts ea JOIN users u ON ea.student_id = u.id
                  JOIN exams e ON ea.exam_id = e.id JOIN courses c ON e.course_id = c.id
+                 JOIN departments d ON e.department_id = d.id
                  WHERE ea.status IN ('submitted', 'graded')`;
     const params = [];
     if (examId) { params.push(examId); query += ` AND ea.exam_id = $${params.length}`; }
@@ -273,6 +276,8 @@ router.get('/results', authenticate, async (req, res) => {
       score: r.score ? parseFloat(r.score) : undefined,
       totalMarks: r.totalMarks ? parseFloat(r.totalMarks) : undefined,
       essayScore: r.essayScore ? parseFloat(r.essayScore) : 0,
+      examType: r.examType || 'exam',
+      caNumber: r.caNumber || 1,
       answers: {},
       flaggedQuestions: [],
     })));
