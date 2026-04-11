@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { api } from '@/lib/api';
 import type { Question, Course } from '@/lib/types';
+import { ImagePlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
@@ -23,6 +24,8 @@ export default function EditQuestionDialog({ open, onOpenChange, question }: Pro
   const [correctAnswer, setCorrectAnswer] = useState('');
   const [difficulty, setDifficulty] = useState('medium');
   const [courseId, setCourseId] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -36,10 +39,23 @@ export default function EditQuestionDialog({ open, onOpenChange, question }: Pro
       setOptions(question.options?.length ? [...question.options, '', '', '', ''].slice(0, 4) : ['', '', '', '']);
       setCorrectAnswer(typeof question.correctAnswer === 'string' ? question.correctAnswer : (question.correctAnswer?.[0] || ''));
       setDifficulty(question.difficulty);
+      setImageUrl(question.imageUrl || '');
       const course = courses.find(c => c.code === question.course);
       if (course) setCourseId(course.id);
     }
   }, [question, courses]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await api.uploadFile(file);
+      setImageUrl(result.url);
+      toast.success('Image uploaded');
+    } catch { toast.error('Failed to upload image'); }
+    finally { setUploading(false); }
+  };
 
   const handleSave = async () => {
     if (!question || !text.trim()) return;
@@ -48,6 +64,7 @@ export default function EditQuestionDialog({ open, onOpenChange, question }: Pro
       await api.updateQuestion(question.id, {
         type, text, options: type === 'mcq' ? options.filter(o => o.trim()) : undefined,
         correctAnswer: correctAnswer || undefined, difficulty, courseId,
+        imageUrl: imageUrl || undefined,
       });
       toast.success('Question updated');
       onOpenChange(false);
@@ -97,6 +114,26 @@ export default function EditQuestionDialog({ open, onOpenChange, question }: Pro
             <Label>Question Text <span className="text-destructive">*</span></Label>
             <Textarea rows={3} value={text} onChange={e => setText(e.target.value)} required />
           </div>
+
+          {/* Image Upload */}
+          <div className="space-y-2">
+            <Label>Question Image (optional)</Label>
+            {imageUrl ? (
+              <div className="relative inline-block">
+                <img src={imageUrl} alt="Question" className="max-h-40 rounded-lg border border-border object-contain" />
+                <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6" onClick={() => setImageUrl('')}>
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 cursor-pointer border border-dashed border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                <ImagePlus className="w-5 h-5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">{uploading ? 'Uploading...' : 'Click to upload an image'}</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+              </label>
+            )}
+          </div>
+
           {type === 'mcq' && (
             <div className="space-y-2">
               <Label>Options</Label>
