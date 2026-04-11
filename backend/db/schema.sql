@@ -80,6 +80,7 @@ CREATE TABLE questions (
   difficulty difficulty_level NOT NULL DEFAULT 'medium',
   course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   created_by UUID REFERENCES users(id),
+  image_url TEXT,
   synced BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

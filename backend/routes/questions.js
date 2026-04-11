@@ -28,7 +28,7 @@ router.get('/exam/:examId', authenticate, async (req, res) => {
       if (answeredIds.length > 0) {
         // Get all questions from exam pool
         const { rows: allQ } = await pool.query(
-          `SELECT q.id, q.type, q.text, q.options, q.difficulty
+          `SELECT q.id, q.type, q.text, q.options, q.difficulty, q.image_url
            FROM questions q JOIN exam_questions eq ON q.id = eq.question_id
            WHERE eq.exam_id = $1`,
           [examId]
@@ -49,7 +49,7 @@ router.get('/exam/:examId', authenticate, async (req, res) => {
         return res.json(finalQ.map(q => ({
           id: q.id, type: q.type, text: q.text,
           options: q.options ? shuffleArray([...q.options]) : q.options,
-          difficulty: q.difficulty,
+          difficulty: q.difficulty, imageUrl: q.image_url || null,
         })));
       }
     }
@@ -59,7 +59,7 @@ router.get('/exam/:examId', authenticate, async (req, res) => {
     const qta = examInfo[0]?.questions_to_answer || 20;
 
     const { rows } = await pool.query(
-      `SELECT q.id, q.type, q.text, q.options, q.difficulty
+      `SELECT q.id, q.type, q.text, q.options, q.difficulty, q.image_url
        FROM questions q
        JOIN exam_questions eq ON q.id = eq.question_id
        WHERE eq.exam_id = $1
@@ -74,7 +74,7 @@ router.get('/exam/:examId', authenticate, async (req, res) => {
     res.json(shuffledQuestions.map(q => ({
       id: q.id, type: q.type, text: q.text,
       options: q.options ? shuffleArray([...q.options]) : q.options,
-      difficulty: q.difficulty,
+      difficulty: q.difficulty, imageUrl: q.image_url || null,
     })));
   } catch (err) {
     console.error('Get exam questions error:', err);
@@ -105,7 +105,7 @@ router.get('/bank', authenticate, requireRole('super_admin', 'admin', 'examiner'
       id: q.id, type: q.type, text: q.text,
       options: q.options, correctAnswer: q.correct_answer,
       difficulty: q.difficulty, course: q.course_code,
-      createdBy: q.created_by,
+      createdBy: q.created_by, imageUrl: q.image_url || null,
     })));
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch question bank' });
@@ -114,12 +114,12 @@ router.get('/bank', authenticate, requireRole('super_admin', 'admin', 'examiner'
 
 // Create question
 router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner', 'instructor'), async (req, res) => {
-  const { type, text, options, correctAnswer, difficulty, courseId } = req.body;
+  const { type, text, options, correctAnswer, difficulty, courseId, imageUrl } = req.body;
   try {
     const { rows } = await pool.query(
-      `INSERT INTO questions (type, text, options, correct_answer, difficulty, course_id, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [type, text, JSON.stringify(options), JSON.stringify(correctAnswer), difficulty, courseId, req.user.id]
+      `INSERT INTO questions (type, text, options, correct_answer, difficulty, course_id, created_by, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [type, text, JSON.stringify(options), JSON.stringify(correctAnswer), difficulty, courseId, req.user.id, imageUrl || null]
     );
     res.status(201).json({ id: rows[0].id });
   } catch (err) {
@@ -130,11 +130,11 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner', '
 
 // Update question
 router.put('/:id', authenticate, requireRole('super_admin', 'admin', 'examiner', 'instructor'), async (req, res) => {
-  const { type, text, options, correctAnswer, difficulty, courseId } = req.body;
+  const { type, text, options, correctAnswer, difficulty, courseId, imageUrl } = req.body;
   try {
     await pool.query(
-      `UPDATE questions SET type=$1, text=$2, options=$3, correct_answer=$4, difficulty=$5, course_id=$6 WHERE id=$7`,
-      [type, text, options ? JSON.stringify(options) : null, correctAnswer ? JSON.stringify(correctAnswer) : null, difficulty, courseId, req.params.id]
+      `UPDATE questions SET type=$1, text=$2, options=$3, correct_answer=$4, difficulty=$5, course_id=$6, image_url=$7 WHERE id=$8`,
+      [type, text, options ? JSON.stringify(options) : null, correctAnswer ? JSON.stringify(correctAnswer) : null, difficulty, courseId, imageUrl || null, req.params.id]
     );
     res.json({ success: true });
   } catch (err) {

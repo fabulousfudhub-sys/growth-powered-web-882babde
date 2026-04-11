@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Save, Upload } from 'lucide-react';
+import { Plus, Trash2, Save, Upload, ImagePlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportCSVDialog from '@/components/dialogs/ImportCSVDialog';
 
@@ -22,6 +22,8 @@ export default function CreateQuestionPage() {
   const [correctAnswer, setCorrectAnswer] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [imageUrl, setImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     api.getCourses().then(allCourses => {
@@ -34,6 +36,18 @@ export default function CreateQuestionPage() {
   const addOption = () => setOptions(prev => [...prev, '']);
   const removeOption = (i: number) => setOptions(prev => prev.filter((_, idx) => idx !== i));
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await api.uploadFile(file);
+      setImageUrl(result.url);
+      toast.success('Image uploaded');
+    } catch { toast.error('Failed to upload image'); }
+    finally { setUploading(false); }
+  };
+
   const handleSave = async () => {
     if (!text || !course) { toast.error('Please fill in all required fields'); return; }
     try {
@@ -43,9 +57,10 @@ export default function CreateQuestionPage() {
         correctAnswer: correctAnswer || undefined,
         difficulty,
         courseId: course,
+        imageUrl: imageUrl || undefined,
       });
       toast.success('Question saved!');
-      setText(''); setOptions(['', '', '', '']); setCorrectAnswer('');
+      setText(''); setOptions(['', '', '', '']); setCorrectAnswer(''); setImageUrl('');
     } catch { toast.error('Failed to save question'); }
   };
 
@@ -63,6 +78,26 @@ export default function CreateQuestionPage() {
             <div className="space-y-2"><Label>Course</Label><Select value={course} onValueChange={setCourse}><SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger><SelectContent>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.code} - {c.title}</SelectItem>)}</SelectContent></Select></div>
           </div>
           <div className="space-y-2"><Label>Question Text</Label><Textarea rows={3} placeholder="Enter the question..." value={text} onChange={e => setText(e.target.value)} /></div>
+
+          {/* Image Upload */}
+          <div className="space-y-2">
+            <Label>Question Image (optional)</Label>
+            {imageUrl ? (
+              <div className="relative inline-block">
+                <img src={imageUrl} alt="Question" className="max-h-40 rounded-lg border border-border object-contain" />
+                <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6" onClick={() => setImageUrl('')}>
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 cursor-pointer border border-dashed border-border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                <ImagePlus className="w-5 h-5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">{uploading ? 'Uploading...' : 'Upload flowchart, diagram, or drawing'}</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
+              </label>
+            )}
+          </div>
+
           {type === 'mcq' && (
             <div className="space-y-3">
               <Label>Options</Label>

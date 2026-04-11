@@ -588,6 +588,7 @@ export const api = {
     correctAnswer?: string | string[];
     difficulty: string;
     courseId: string;
+    imageUrl?: string;
   }): Promise<{ id: string }> {
     return request("/api/questions", {
       method: "POST",
@@ -603,6 +604,7 @@ export const api = {
       correctAnswer?: string | string[];
       difficulty: string;
       courseId: string;
+      imageUrl?: string;
     },
   ): Promise<void> {
     await request(`/api/questions/${id}`, {

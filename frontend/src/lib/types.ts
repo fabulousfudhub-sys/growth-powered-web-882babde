@@ -56,6 +56,7 @@ export interface Question {
   difficulty: "easy" | "medium" | "hard";
   course: string;
   createdBy?: string;
+  imageUrl?: string;
 }
 
 export interface ExamPin {
