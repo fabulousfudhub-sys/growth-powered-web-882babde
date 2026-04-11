@@ -183,7 +183,7 @@ export default function ExamsPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   <Badge className={statusColor[exam.status]}>{exam.status}</Badge>
-                  {(exam as any).examType === "ca" && <Badge variant="outline" className="text-xs bg-warning/10 text-warning">CA{(exam as any).caNumber || ""}</Badge>}
+                  {(exam as any).examType === "ca" && <Badge variant="outline" className="text-xs bg-warning/10 text-warning">{(exam as any).caNumber === 2 ? "Second CA" : "First CA"}</Badge>}
                   {exam.pinMode === "shared" && <Badge variant="outline" className="text-xs">Shared PIN</Badge>}
 
                   {(exam.status === 'active' || exam.status === 'scheduled' || exam.status === 'draft') && (
