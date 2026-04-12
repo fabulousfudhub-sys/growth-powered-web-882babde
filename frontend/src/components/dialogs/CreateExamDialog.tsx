@@ -344,7 +344,12 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
               </div>
               <div className="space-y-2">
                 <Label>Type <span className="text-destructive">*</span></Label>
-                <Select value={form.examType} onValueChange={(v) => update("examType", v)}>
+                <Select value={form.examType} onValueChange={(v) => {
+                  update("examType", v);
+                  if (v === "ca" && parseFloat(form.totalMarks) > 30) {
+                    update("totalMarks", "30");
+                  }
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="exam">Exam</SelectItem>
