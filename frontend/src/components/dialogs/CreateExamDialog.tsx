@@ -469,9 +469,20 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
                 <Input
                   type="number"
                   value={form.totalMarks}
-                  onChange={(e) => update("totalMarks", e.target.value)}
+                  max={form.examType === "ca" ? 30 : undefined}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (form.examType === "ca" && parseFloat(val) > 30) {
+                      update("totalMarks", "30");
+                    } else {
+                      update("totalMarks", val);
+                    }
+                  }}
                   required
                 />
+                {form.examType === "ca" && (
+                  <p className="text-xs text-muted-foreground">CA/Test marks cannot exceed 30</p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
