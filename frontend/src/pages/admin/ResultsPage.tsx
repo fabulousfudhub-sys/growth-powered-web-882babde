@@ -17,10 +17,7 @@ import {
 import {
   Download, BarChart3, Search, TrendingUp, Users, CheckCircle, ChevronDown, BookOpen,
 } from "lucide-react";
-import Pagination from "@/components/admin/Pagination";
 import { toast } from "sonner";
-
-const PAGE_SIZE = 20;
 
 interface ExtendedAttempt extends ExamAttempt {
   studentName?: string;
@@ -54,11 +51,7 @@ export default function ResultsPage() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [search, setSearch] = useState("");
-  const [filterExam, setFilterExam] = useState("all");
   const [filterCourse, setFilterCourse] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [viewMode, setViewMode] = useState<"list" | "course">("list");
-  const [page, setPage] = useState(1);
   const [openCourses, setOpenCourses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -76,27 +69,21 @@ export default function ResultsPage() {
     }
   }, [user]);
 
-  const getExamTitle = (id: string) => exams.find((e) => e.id === id)?.title || "Unknown";
-
   const roleFilteredAttempts =
     user?.role === "examiner" || user?.role === "instructor"
       ? attempts.filter((a) => exams.some((e) => e.id === a.examId))
       : attempts;
 
   const filteredAttempts = roleFilteredAttempts.filter((a) => {
+    const ext = a as ExtendedAttempt;
     const matchSearch = !search || (
-      getExamTitle(a.examId).toLowerCase().includes(search.toLowerCase()) ||
-      (a as any).studentName?.toLowerCase().includes(search.toLowerCase()) ||
-      (a as any).regNumber?.toLowerCase().includes(search.toLowerCase())
+      ext.studentName?.toLowerCase().includes(search.toLowerCase()) ||
+      ext.regNumber?.toLowerCase().includes(search.toLowerCase()) ||
+      ext.courseCode?.toLowerCase().includes(search.toLowerCase())
     );
-    const matchExam = filterExam === "all" || a.examId === filterExam;
-    const matchCourse = filterCourse === "all" || (a as any).courseCode === filterCourse;
-    const matchStatus = filterStatus === "all" || a.status === filterStatus;
-    return matchSearch && matchExam && matchCourse && matchStatus;
+    const matchCourse = filterCourse === "all" || ext.courseCode === filterCourse;
+    return matchSearch && matchCourse;
   });
-
-  const totalPages = Math.ceil(filteredAttempts.length / PAGE_SIZE);
-  const paginatedAttempts = filteredAttempts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const avgScore =
     roleFilteredAttempts.length > 0
@@ -146,21 +133,17 @@ export default function ResultsPage() {
     });
   };
 
-  const getCourseConfig = (courseCode: string) => {
-    return courses.find(c => c.code === courseCode);
-  };
-
   const handleExport = () => {
-    const csv = [
-      "Student Name,Reg. Number,Exam,Type,Score,Total Marks,Essay Score,Status,Submitted At",
-      ...filteredAttempts.map(
-        (a) => {
-          const ext = a as ExtendedAttempt;
-          return `"${ext.studentName || a.studentId}","${ext.regNumber || ""}","${getExamTitle(a.examId)}",${ext.examType || "exam"},${a.score || 0},${a.totalMarks || 0},${ext.essayScore || 0},${a.status},"${a.submittedAt ? new Date(a.submittedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" }) : ""}"`;
-        }
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const rows: string[] = ["Student Name,Reg. Number,Course,CA Score,Exam Score,Total"];
+    for (const group of courseGroups) {
+      for (const [, student] of group.students) {
+        const caTotal = student.caScores.reduce((sum, ca) => sum + ca.score, 0);
+        const examTotal = student.examScore?.score || 0;
+        const combined = caTotal + examTotal;
+        rows.push(`"${student.studentName}","${student.regNumber}","${group.courseCode}",${caTotal},${examTotal},${combined}`);
+      }
+    }
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const el = document.createElement("a");
     el.href = url;
@@ -170,7 +153,6 @@ export default function ResultsPage() {
     toast.success("Results exported");
   };
 
-  // Get unique course codes for filter
   const uniqueCourses = [...new Set(roleFilteredAttempts.map(a => (a as any).courseCode).filter(Boolean))].sort();
 
   return (
@@ -179,20 +161,12 @@ export default function ResultsPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Results</h1>
           <p className="text-sm text-muted-foreground">
-            {user?.role === "instructor" ? "Results for your courses" : "View exam results and performance"}
+            {user?.role === "instructor" ? "Results for your courses" : "View exam results grouped by course"}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant={viewMode === "list" ? "default" : "outline"} size="sm" onClick={() => setViewMode("list")}>
-            List View
-          </Button>
-          <Button variant={viewMode === "course" ? "default" : "outline"} size="sm" onClick={() => setViewMode("course")}>
-            <BookOpen className="w-4 h-4 mr-1" /> Course View
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={handleExport}>
-            <Download className="w-4 h-4" /> Export CSV
-          </Button>
-        </div>
+        <Button variant="outline" className="gap-2" onClick={handleExport}>
+          <Download className="w-4 h-4" /> Export CSV
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -222,156 +196,70 @@ export default function ResultsPage() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative max-w-xs flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search by exam, student name or matric..." className="pl-10"
-            value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+          <Input placeholder="Search by student name, matric, or course..." className="pl-10"
+            value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <Select value={filterCourse} onValueChange={(v) => { setFilterCourse(v); setPage(1); }}>
+        <Select value={filterCourse} onValueChange={setFilterCourse}>
           <SelectTrigger className="w-44"><SelectValue placeholder="Filter by course" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Courses</SelectItem>
             {uniqueCourses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterExam} onValueChange={(v) => { setFilterExam(v); setPage(1); }}>
-          <SelectTrigger className="w-52"><SelectValue placeholder="Filter by exam" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Exams</SelectItem>
-            {exams.map(e => <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v); setPage(1); }}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="submitted">Submitted</SelectItem>
-            <SelectItem value="graded">Graded</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
-      {/* List View */}
-      {viewMode === "list" && (
-        <>
-          <Card className="border-border/40 shadow-sm">
-            <CardContent className="p-0">
-              <ScrollArea className="max-h-[500px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead>Student Name</TableHead>
-                      <TableHead>Reg. No.</TableHead>
-                      <TableHead>Exam</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Score</TableHead>
-                      <TableHead>Essay Score</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Submitted</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedAttempts.map((a) => {
-                      const ext = a as ExtendedAttempt;
-                      return (
-                        <TableRow key={a.id}>
-                          <TableCell className="font-medium">{ext.studentName || a.studentId}</TableCell>
-                          <TableCell className="font-mono text-sm">{ext.regNumber || "—"}</TableCell>
-                          <TableCell>{getExamTitle(a.examId)}</TableCell>
-                          <TableCell>
-                            <Badge variant={ext.examType === "ca" ? "secondary" : "default"} className="text-xs">
-                              {ext.examType === "ca" ? `CA${ext.caNumber || ""}` : "Exam"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-mono font-semibold">
-                            {a.score !== undefined ? (
-                              <span className={a.score / (a.totalMarks || 1) >= 0.5 ? "text-success" : "text-destructive"}>
-                                {a.score}/{a.totalMarks}
-                              </span>
-                            ) : "—"}
-                          </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {ext.essayScore && ext.essayScore > 0 ? ext.essayScore : "0"}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={a.status === "graded" ? "default" : "secondary"}>{a.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {a.submittedAt ? new Date(a.submittedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" }) : "—"}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    {paginatedAttempts.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No results found</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={filteredAttempts.length} pageSize={PAGE_SIZE} />
-        </>
-      )}
+      {/* Course-wise grouped results */}
+      <div className="space-y-4">
+        {courseGroups.length === 0 && (
+          <div className="text-center py-12 text-muted-foreground">No results found</div>
+        )}
+        {courseGroups.map(group => {
+          const isOpen = openCourses.has(group.courseCode);
+          const hasCa = Array.from(group.students.values()).some(s => s.caScores.length > 0);
 
-      {/* Course-wise View */}
-      {viewMode === "course" && (
-        <div className="space-y-4">
-          {courseGroups.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">No results found</div>
-          )}
-          {courseGroups.map(group => {
-            const courseConfig = getCourseConfig(group.courseCode);
-            const caWeight = courseConfig?.caWeight ?? 30;
-            const examWeight = courseConfig?.examWeight ?? 70;
-            const isOpen = openCourses.has(group.courseCode);
-
-            return (
-              <Collapsible key={group.courseCode} open={isOpen} onOpenChange={() => toggleCourseOpen(group.courseCode)}>
-                <Card className="border-border/40">
-                  <CollapsibleTrigger asChild>
-                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <BookOpen className="w-5 h-5 text-primary" />
-                          <div>
-                            <CardTitle className="text-base">{group.courseCode}</CardTitle>
-                            <p className="text-xs text-muted-foreground">
-                              {group.students.size} student(s) · CA: {caWeight}% · Exam: {examWeight}%
-                            </p>
-                          </div>
+          return (
+            <Collapsible key={group.courseCode} open={isOpen} onOpenChange={() => toggleCourseOpen(group.courseCode)}>
+              <Card className="border-border/40">
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <BookOpen className="w-5 h-5 text-primary" />
+                        <div>
+                          <CardTitle className="text-base">{group.courseCode}</CardTitle>
+                          <p className="text-xs text-muted-foreground">
+                            {group.students.size} student(s)
+                          </p>
                         </div>
-                        <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
                       </div>
-                    </CardHeader>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <CardContent className="p-0">
-                      <ScrollArea className="max-h-[400px]">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="hover:bg-transparent">
-                              <TableHead>Student</TableHead>
-                              <TableHead>Reg. No.</TableHead>
-                              <TableHead>CA Score(s)</TableHead>
-                              <TableHead>Exam Score</TableHead>
-                              <TableHead>Combined</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {Array.from(group.students.entries()).map(([studentId, student]) => {
-                              const caTotal = student.caScores.reduce((sum, ca) => sum + ca.score, 0);
-                              const caTotalMarks = student.caScores.reduce((sum, ca) => sum + ca.totalMarks, 0);
-                              const caPercent = caTotalMarks > 0 ? (caTotal / caTotalMarks) * 100 : 0;
-                              const examPercent = student.examScore
-                                ? (student.examScore.score / (student.examScore.totalMarks || 1)) * 100
-                                : 0;
-                              const combined = (caPercent * caWeight / 100) + (examPercent * examWeight / 100);
+                      <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="p-0">
+                    <ScrollArea className="max-h-[400px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead>Student</TableHead>
+                            <TableHead>Reg. No.</TableHead>
+                            {hasCa && <TableHead>CA Score</TableHead>}
+                            <TableHead>Exam Score</TableHead>
+                            <TableHead>Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Array.from(group.students.entries()).map(([studentId, student]) => {
+                            const caTotal = student.caScores.reduce((sum, ca) => sum + ca.score, 0);
+                            const examScore = student.examScore?.score || 0;
+                            const combined = caTotal + examScore;
 
-                              return (
-                                <TableRow key={studentId}>
-                                  <TableCell className="font-medium">{student.studentName}</TableCell>
-                                  <TableCell className="font-mono text-sm">{student.regNumber}</TableCell>
+                            return (
+                              <TableRow key={studentId}>
+                                <TableCell className="font-medium">{student.studentName}</TableCell>
+                                <TableCell className="font-mono text-sm">{student.regNumber}</TableCell>
+                                {hasCa && (
                                   <TableCell>
                                     {student.caScores.length > 0 ? (
                                       <div className="space-y-0.5">
@@ -385,30 +273,30 @@ export default function ResultsPage() {
                                       </div>
                                     ) : <span className="text-muted-foreground">—</span>}
                                   </TableCell>
-                                  <TableCell className="font-mono text-sm">
-                                    {student.examScore
-                                      ? `${student.examScore.score}/${student.examScore.totalMarks}`
-                                      : <span className="text-muted-foreground">—</span>}
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className={`font-mono font-semibold ${combined >= 50 ? "text-success" : "text-destructive"}`}>
-                                      {combined.toFixed(1)}%
-                                    </span>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </ScrollArea>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            );
-          })}
-        </div>
-      )}
+                                )}
+                                <TableCell className="font-mono text-sm">
+                                  {student.examScore
+                                    ? `${student.examScore.score}/${student.examScore.totalMarks}`
+                                    : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                                <TableCell>
+                                  <span className={`font-mono font-semibold ${combined >= 50 ? "text-success" : "text-destructive"}`}>
+                                    {combined}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          );
+        })}
+      </div>
     </div>
   );
 }

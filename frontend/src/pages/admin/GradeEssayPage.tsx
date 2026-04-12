@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import type { Exam, ExamAttempt } from "@/lib/types";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -14,11 +13,13 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { CheckCircle, Clock, FileText, MessageSquare, Save } from "lucide-react";
+import { CheckCircle, Clock, FileText, MessageSquare, Save, BookOpen, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import Pagination from "@/components/admin/Pagination";
 
 interface EssayAnswer {
   questionId: string;
@@ -35,12 +36,11 @@ interface GradingEntry {
   studentName: string;
   regNumber: string;
   examTitle: string;
+  examId: string;
   maxMarks: number;
   status: "pending" | "graded";
   hasEssayQuestions: boolean;
 }
-
-const PAGE_SIZE = 15;
 
 export default function GradeEssayPage() {
   const [selectedExam, setSelectedExam] = useState("");
@@ -49,7 +49,7 @@ export default function GradeEssayPage() {
   const [gradingDialog, setGradingDialog] = useState<GradingEntry | null>(null);
   const [essayAnswers, setEssayAnswers] = useState<EssayAnswer[]>([]);
   const [grades, setGrades] = useState<Record<string, { score: string; feedback: string }>>({});
-  const [page, setPage] = useState(1);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     api.getExams().then(setExams);
@@ -66,14 +66,30 @@ export default function GradeEssayPage() {
         studentName: (a as any).studentName || a.studentId,
         regNumber: (a as any).regNumber || "",
         examTitle: exam?.title || "Unknown",
+        examId: a.examId,
         maxMarks: exam?.totalMarks || 20,
         status: a.status === "graded" ? "graded" : "pending",
-        hasEssayQuestions: true, // Will be confirmed when opening
+        hasEssayQuestions: true,
       };
     });
 
-  const totalPages = Math.ceil(essayEntries.length / PAGE_SIZE);
-  const paginatedEntries = essayEntries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Group by exam
+  const groupedByExam = useMemo(() => {
+    const map = new Map<string, { examTitle: string; entries: GradingEntry[] }>();
+    for (const e of essayEntries) {
+      if (!map.has(e.examId)) map.set(e.examId, { examTitle: e.examTitle, entries: [] });
+      map.get(e.examId)!.entries.push(e);
+    }
+    return map;
+  }, [essayEntries]);
+
+  const toggleGroup = (key: string) => {
+    setOpenGroups(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   const openGrading = async (entry: GradingEntry) => {
     try {
@@ -83,7 +99,6 @@ export default function GradeEssayPage() {
         return;
       }
       setEssayAnswers(answers);
-      // Pre-populate grades from existing scores
       const existingGrades: Record<string, { score: string; feedback: string }> = {};
       answers.forEach(a => {
         if (a.essayScore !== undefined && a.essayScore !== null) {
@@ -92,9 +107,7 @@ export default function GradeEssayPage() {
       });
       setGrades(existingGrades);
       setGradingDialog(entry);
-    } catch {
-      toast.error("Failed to load essay answers");
-    }
+    } catch { toast.error("Failed to load essay answers"); }
   };
 
   const saveGrades = async () => {
@@ -116,16 +129,12 @@ export default function GradeEssayPage() {
           feedback: g.feedback,
         });
         saved++;
-      } catch {
-        toast.error("Failed to save grade");
-        return;
-      }
+      } catch { toast.error("Failed to save grade"); return; }
     }
     toast.success(`${saved} essay question(s) graded successfully`);
     setGradingDialog(null);
     setEssayAnswers([]);
     setGrades({});
-    // Refresh attempts
     api.getAttempts().then(setAttempts);
   };
 
@@ -134,13 +143,9 @@ export default function GradeEssayPage() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Essay Grading</h1>
-          <p className="text-sm text-muted-foreground">
-            Grade essay and short answer questions separately from objective scores
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Essay Grading</h1>
+        <p className="text-sm text-muted-foreground">Grade essay and short answer questions — grouped by exam</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -162,7 +167,7 @@ export default function GradeEssayPage() {
       </div>
 
       <div className="flex items-center gap-4">
-        <Select value={selectedExam} onValueChange={(v) => { setSelectedExam(v); setPage(1); }}>
+        <Select value={selectedExam} onValueChange={setSelectedExam}>
           <SelectTrigger className="w-64"><SelectValue placeholder="Filter by exam" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Exams</SelectItem>
@@ -171,66 +176,86 @@ export default function GradeEssayPage() {
         </Select>
       </div>
 
-      <Card className="border-border/40 shadow-sm">
-        <CardContent className="p-0">
-          <ScrollArea className="max-h-[500px]">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Student Name</TableHead>
-                  <TableHead>Reg. No.</TableHead>
-                  <TableHead>Exam</TableHead>
-                  <TableHead>Obj. Score</TableHead>
-                  <TableHead>Essay Score</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedEntries.map((entry, i) => {
-                  const attempt = attempts.find(a => a.id === entry.attemptId);
-                  return (
-                    <TableRow key={i}>
-                      <TableCell className="font-medium">{entry.studentName}</TableCell>
-                      <TableCell className="font-mono text-sm">{entry.regNumber || "—"}</TableCell>
-                      <TableCell className="text-muted-foreground">{entry.examTitle}</TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {attempt?.score !== undefined ? `${attempt.score}/${attempt.totalMarks || 0}` : "—"}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {(attempt as any)?.essayScore !== undefined && (attempt as any)?.essayScore > 0
-                          ? (attempt as any).essayScore
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={entry.status === "graded" ? "default" : "secondary"}>
-                          {entry.status === "graded" ? "Graded" : "Pending"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" variant={entry.status === "graded" ? "outline" : "default"} onClick={() => openGrading(entry)}>
-                          <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-                          {entry.status === "graded" ? "Review" : "Grade Essays"}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {paginatedEntries.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      No submissions found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={essayEntries.length} pageSize={PAGE_SIZE} />
+      {/* Grouped by exam */}
+      <div className="space-y-4">
+        {groupedByExam.size === 0 && (
+          <div className="text-center py-12 text-muted-foreground">No submissions found</div>
+        )}
+        {Array.from(groupedByExam.entries()).map(([examId, { examTitle, entries }]) => {
+          const isOpen = openGroups.has(examId);
+          const pending = entries.filter(e => e.status === "pending").length;
+          return (
+            <Collapsible key={examId} open={isOpen} onOpenChange={() => toggleGroup(examId)}>
+              <Card className="border-border/40">
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <BookOpen className="w-5 h-5 text-primary" />
+                        <div>
+                          <CardTitle className="text-base">{examTitle}</CardTitle>
+                          <p className="text-xs text-muted-foreground">
+                            {entries.length} submission(s) · {pending} pending
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="p-0">
+                    <ScrollArea className="max-h-[400px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead>Student Name</TableHead>
+                            <TableHead>Reg. No.</TableHead>
+                            <TableHead>Obj. Score</TableHead>
+                            <TableHead>Essay Score</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {entries.map((entry, i) => {
+                            const attempt = attempts.find(a => a.id === entry.attemptId);
+                            return (
+                              <TableRow key={i}>
+                                <TableCell className="font-medium">{entry.studentName}</TableCell>
+                                <TableCell className="font-mono text-sm">{entry.regNumber || "—"}</TableCell>
+                                <TableCell className="font-mono text-sm">
+                                  {attempt?.score !== undefined ? `${attempt.score}/${attempt.totalMarks || 0}` : "—"}
+                                </TableCell>
+                                <TableCell className="font-mono text-sm">
+                                  {(attempt as any)?.essayScore > 0 ? (attempt as any).essayScore : "—"}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={entry.status === "graded" ? "default" : "secondary"}>
+                                    {entry.status === "graded" ? "Graded" : "Pending"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button size="sm" variant={entry.status === "graded" ? "outline" : "default"} onClick={() => openGrading(entry)}>
+                                    <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
+                                    {entry.status === "graded" ? "Review" : "Grade"}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          );
+        })}
+      </div>
 
-      {/* Per-question grading dialog */}
+      {/* Grading dialog */}
       <Dialog open={!!gradingDialog} onOpenChange={(open) => { if (!open) { setGradingDialog(null); setEssayAnswers([]); setGrades({}); } }}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -245,11 +270,9 @@ export default function GradeEssayPage() {
                 <div><span className="text-muted-foreground">Matric:</span> <strong>{gradingDialog.regNumber}</strong></div>
                 <div><span className="text-muted-foreground">Exam:</span> <strong>{gradingDialog.examTitle}</strong></div>
               </div>
-
               <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
-                Only essay and short answer questions are shown below. Objective questions are auto-graded separately.
+                Only essay and short answer questions are shown below.
               </p>
-
               <div className="space-y-4">
                 {essayAnswers.map((ea, idx) => (
                   <div key={ea.questionId} className="p-4 rounded-lg border space-y-3">
@@ -260,21 +283,17 @@ export default function GradeEssayPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-medium text-foreground mb-1 block">Score</label>
-                        <Input
-                          type="number"
-                          min={0}
+                        <Input type="number" min={0}
                           value={grades[ea.questionId]?.score || ''}
                           onChange={(e) => setGrades(prev => ({ ...prev, [ea.questionId]: { ...prev[ea.questionId], score: e.target.value, feedback: prev[ea.questionId]?.feedback || '' } }))}
-                          placeholder="Marks"
-                        />
+                          placeholder="Marks" />
                       </div>
                       <div>
                         <label className="text-xs font-medium text-foreground mb-1 block">Feedback</label>
                         <Input
                           value={grades[ea.questionId]?.feedback || ''}
                           onChange={(e) => setGrades(prev => ({ ...prev, [ea.questionId]: { ...prev[ea.questionId], feedback: e.target.value, score: prev[ea.questionId]?.score || '' } }))}
-                          placeholder="Optional feedback"
-                        />
+                          placeholder="Optional feedback" />
                       </div>
                     </div>
                   </div>
