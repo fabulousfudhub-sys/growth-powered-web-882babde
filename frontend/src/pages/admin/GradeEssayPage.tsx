@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import type { Exam, ExamAttempt } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -11,14 +10,10 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { CheckCircle, Clock, FileText, MessageSquare, Save, BookOpen, ChevronDown } from "lucide-react";
+import { CheckCircle, Clock, FileText, MessageSquare, Save, BookOpen, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface EssayAnswer {
@@ -49,11 +44,11 @@ export default function GradeEssayPage() {
   const [gradingDialog, setGradingDialog] = useState<GradingEntry | null>(null);
   const [essayAnswers, setEssayAnswers] = useState<EssayAnswer[]>([]);
   const [grades, setGrades] = useState<Record<string, { score: string; feedback: string }>>({});
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api.getExams().then(setExams);
-    api.getAttempts().then(setAttempts);
+    api.getExams().then(setExams).catch(() => toast.error("Could not load exams"));
+    api.getAttempts().then(setAttempts).catch(() => toast.error("Could not load submissions"));
   }, []);
 
   const essayEntries: GradingEntry[] = attempts
@@ -73,7 +68,6 @@ export default function GradeEssayPage() {
       };
     });
 
-  // Group by exam
   const groupedByExam = useMemo(() => {
     const map = new Map<string, { examTitle: string; entries: GradingEntry[] }>();
     for (const e of essayEntries) {
@@ -84,11 +78,7 @@ export default function GradeEssayPage() {
   }, [essayEntries]);
 
   const toggleGroup = (key: string) => {
-    setOpenGroups(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+    setExpandedGroups(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
   };
 
   const openGrading = async (entry: GradingEntry) => {
@@ -107,7 +97,9 @@ export default function GradeEssayPage() {
       });
       setGrades(existingGrades);
       setGradingDialog(entry);
-    } catch { toast.error("Failed to load essay answers"); }
+    } catch {
+      toast.error("Failed to load essay answers");
+    }
   };
 
   const saveGrades = async () => {
@@ -118,7 +110,7 @@ export default function GradeEssayPage() {
       if (!g || g.score === '') continue;
       const marks = parseFloat(g.score);
       if (isNaN(marks) || marks < 0) {
-        toast.error(`Invalid marks for question: ${ea.questionText.substring(0, 30)}...`);
+        toast.error("Invalid marks entered. Please check scores.");
         return;
       }
       try {
@@ -129,13 +121,16 @@ export default function GradeEssayPage() {
           feedback: g.feedback,
         });
         saved++;
-      } catch { toast.error("Failed to save grade"); return; }
+      } catch {
+        toast.error("Failed to save grade. Please try again.");
+        return;
+      }
     }
-    toast.success(`${saved} essay question(s) graded successfully`);
+    toast.success(`${saved} essay question(s) graded`);
     setGradingDialog(null);
     setEssayAnswers([]);
     setGrades({});
-    api.getAttempts().then(setAttempts);
+    api.getAttempts().then(setAttempts).catch(() => {});
   };
 
   const pendingCount = essayEntries.filter((e) => e.status === "pending").length;
@@ -149,21 +144,9 @@ export default function GradeEssayPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <div className="stat-card">
-          <Clock className="w-5 h-5 text-warning mb-2" />
-          <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
-          <p className="text-xs text-muted-foreground mt-1">Pending Review</p>
-        </div>
-        <div className="stat-card">
-          <CheckCircle className="w-5 h-5 text-success mb-2" />
-          <p className="text-2xl font-bold text-foreground">{gradedCount}</p>
-          <p className="text-xs text-muted-foreground mt-1">Graded</p>
-        </div>
-        <div className="stat-card">
-          <FileText className="w-5 h-5 text-accent mb-2" />
-          <p className="text-2xl font-bold text-foreground">{essayEntries.length}</p>
-          <p className="text-xs text-muted-foreground mt-1">Total Submissions</p>
-        </div>
+        <div className="stat-card"><Clock className="w-5 h-5 text-warning mb-2" /><p className="text-2xl font-bold text-foreground">{pendingCount}</p><p className="text-xs text-muted-foreground mt-1">Pending Review</p></div>
+        <div className="stat-card"><CheckCircle className="w-5 h-5 text-success mb-2" /><p className="text-2xl font-bold text-foreground">{gradedCount}</p><p className="text-xs text-muted-foreground mt-1">Graded</p></div>
+        <div className="stat-card"><FileText className="w-5 h-5 text-accent mb-2" /><p className="text-2xl font-bold text-foreground">{essayEntries.length}</p><p className="text-xs text-muted-foreground mt-1">Total Submissions</p></div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -176,83 +159,78 @@ export default function GradeEssayPage() {
         </Select>
       </div>
 
-      {/* Grouped by exam */}
-      <div className="space-y-4">
-        {groupedByExam.size === 0 && (
-          <div className="text-center py-12 text-muted-foreground">No submissions found</div>
-        )}
-        {Array.from(groupedByExam.entries()).map(([examId, { examTitle, entries }]) => {
-          const isOpen = openGroups.has(examId);
-          const pending = entries.filter(e => e.status === "pending").length;
-          return (
-            <Collapsible key={examId} open={isOpen} onOpenChange={() => toggleGroup(examId)}>
-              <Card className="border-border/40">
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <BookOpen className="w-5 h-5 text-primary" />
-                        <div>
-                          <CardTitle className="text-base">{examTitle}</CardTitle>
-                          <p className="text-xs text-muted-foreground">
-                            {entries.length} submission(s) · {pending} pending
-                          </p>
-                        </div>
+      {/* Nested data table grouped by exam */}
+      <div className="border border-border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-8"></TableHead>
+              <TableHead>Student Name</TableHead>
+              <TableHead>Reg. No.</TableHead>
+              <TableHead>Obj. Score</TableHead>
+              <TableHead>Essay Score</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {groupedByExam.size === 0 && (
+              <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No submissions found</TableCell></TableRow>
+            )}
+            {Array.from(groupedByExam.entries()).map(([examId, { examTitle, entries }]) => {
+              const isExpanded = expandedGroups.has(examId);
+              const pending = entries.filter(e => e.status === "pending").length;
+              return (
+                <>
+                  <TableRow
+                    key={`hdr-${examId}`}
+                    className="bg-muted/30 hover:bg-muted/40 cursor-pointer border-t-2 border-border"
+                    onClick={() => toggleGroup(examId)}
+                  >
+                    <TableCell className="px-3">
+                      <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                    </TableCell>
+                    <TableCell colSpan={6}>
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-primary" />
+                        <span className="font-semibold text-foreground">{examTitle}</span>
+                        <Badge variant="secondary" className="text-xs">{entries.length} submission{entries.length !== 1 ? "s" : ""}</Badge>
+                        {pending > 0 && <Badge variant="outline" className="text-xs text-warning border-warning">{pending} pending</Badge>}
                       </div>
-                      <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="p-0">
-                    <ScrollArea className="max-h-[400px]">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead>Student Name</TableHead>
-                            <TableHead>Reg. No.</TableHead>
-                            <TableHead>Obj. Score</TableHead>
-                            <TableHead>Essay Score</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Action</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {entries.map((entry, i) => {
-                            const attempt = attempts.find(a => a.id === entry.attemptId);
-                            return (
-                              <TableRow key={i}>
-                                <TableCell className="font-medium">{entry.studentName}</TableCell>
-                                <TableCell className="font-mono text-sm">{entry.regNumber || "—"}</TableCell>
-                                <TableCell className="font-mono text-sm">
-                                  {attempt?.score !== undefined ? `${attempt.score}/${attempt.totalMarks || 0}` : "—"}
-                                </TableCell>
-                                <TableCell className="font-mono text-sm">
-                                  {(attempt as any)?.essayScore > 0 ? (attempt as any).essayScore : "—"}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={entry.status === "graded" ? "default" : "secondary"}>
-                                    {entry.status === "graded" ? "Graded" : "Pending"}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <Button size="sm" variant={entry.status === "graded" ? "outline" : "default"} onClick={() => openGrading(entry)}>
-                                    <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-                                    {entry.status === "graded" ? "Review" : "Grade"}
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          );
-        })}
+                    </TableCell>
+                  </TableRow>
+                  {isExpanded && entries.map((entry, i) => {
+                    const attempt = attempts.find(a => a.id === entry.attemptId);
+                    return (
+                      <TableRow key={`${examId}-${i}`} className="hover:bg-muted/10">
+                        <TableCell></TableCell>
+                        <TableCell className="font-medium">{entry.studentName}</TableCell>
+                        <TableCell className="font-mono text-sm">{entry.regNumber || "—"}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {attempt?.score !== undefined ? `${attempt.score}/${attempt.totalMarks || 0}` : "—"}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {(attempt as any)?.essayScore > 0 ? (attempt as any).essayScore : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={entry.status === "graded" ? "default" : "secondary"}>
+                            {entry.status === "graded" ? "Graded" : "Pending"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant={entry.status === "graded" ? "outline" : "default"} onClick={() => openGrading(entry)}>
+                            <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
+                            {entry.status === "graded" ? "Review" : "Grade"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
 
       {/* Grading dialog */}

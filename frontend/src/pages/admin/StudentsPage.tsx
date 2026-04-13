@@ -2,19 +2,15 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import type { User, Department } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Upload, Search, UserPlus, Eye, Pencil, Trash2, ChevronDown, Building2 } from "lucide-react";
+import { Upload, Search, UserPlus, Eye, Pencil, Trash2, ChevronRight, Building2, GraduationCap } from "lucide-react";
 import AddStudentDialog from "@/components/dialogs/AddStudentDialog";
 import EditUserDialog from "@/components/dialogs/EditUserDialog";
 import ImportCSVDialog from "@/components/dialogs/ImportCSVDialog";
@@ -41,16 +37,13 @@ export default function StudentsPage() {
   const [deleteStudent, setDeleteStudent] = useState<User | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set());
+  const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set());
 
   const load = () => {
     api.getStudents().then((all) => {
-      setStudents(
-        user?.role === "examiner"
-          ? all.filter((s) => s.department === user.department)
-          : all,
-      );
-    });
+      setStudents(user?.role === "examiner" ? all.filter((s) => s.department === user.department) : all);
+    }).catch(() => toast.error("Could not load students"));
     api.getDepartments().then(setDepartments).catch(() => {});
   };
   useEffect(load, [user]);
@@ -67,7 +60,6 @@ export default function StudentsPage() {
     return matchSearch && matchDept && matchLevel;
   });
 
-  // Group by department -> level
   const grouped = useMemo(() => {
     const map = new Map<string, Map<string, User[]>>();
     for (const s of filtered) {
@@ -81,21 +73,9 @@ export default function StudentsPage() {
     return map;
   }, [filtered]);
 
-  const toggleGroup = (key: string) => {
-    setOpenGroups(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  };
+  const toggleDept = (d: string) => setExpandedDepts(prev => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; });
+  const toggleLevel = (k: string) => setExpandedLevels(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const toggleSelect = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const handleDelete = async () => {
     if (!deleteStudent) return;
@@ -103,8 +83,8 @@ export default function StudentsPage() {
       await api.deleteUser(deleteStudent.id);
       toast.success("Student deleted");
       setStudents((prev) => prev.filter((s) => s.id !== deleteStudent.id));
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete student");
+    } catch {
+      toast.error("Failed to delete student");
     }
     setDeleteStudent(null);
   };
@@ -126,7 +106,7 @@ export default function StudentsPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Students</h1>
           <p className="text-sm text-muted-foreground">
-            {user?.role === "examiner" ? `Students in ${user.department}` : "Manage student records — grouped by department and level"}
+            {user?.role === "examiner" ? `Students in ${user.department}` : "Grouped by department and level"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -144,12 +124,10 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative max-w-xs flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search students..." className="pl-10" value={search}
-            onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder="Search students..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Select value={filterDept} onValueChange={setFilterDept}>
           <SelectTrigger className="w-48"><SelectValue placeholder="Department" /></SelectTrigger>
@@ -169,102 +147,99 @@ export default function StudentsPage() {
 
       <p className="text-sm text-muted-foreground">{filtered.length} student(s) total</p>
 
-      {/* Grouped by Department → Level */}
-      <div className="space-y-4">
-        {Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([dept, levelMap]) => {
-          const deptKey = `dept-${dept}`;
-          const isDeptOpen = openGroups.has(deptKey);
-          const deptCount = Array.from(levelMap.values()).reduce((s, arr) => s + arr.length, 0);
+      {/* Nested data table: Dept → Level → Students */}
+      <div className="border border-border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-8"></TableHead>
+              <TableHead className="w-10"></TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Reg. Number</TableHead>
+              <TableHead>Last Login</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {grouped.size === 0 && (
+              <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No students found</TableCell></TableRow>
+            )}
+            {Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([dept, levelMap]) => {
+              const isDeptExpanded = expandedDepts.has(dept);
+              const deptCount = Array.from(levelMap.values()).reduce((s, arr) => s + arr.length, 0);
 
-          return (
-            <Collapsible key={deptKey} open={isDeptOpen} onOpenChange={() => toggleGroup(deptKey)}>
-              <Card className="border-border/40">
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Building2 className="w-5 h-5 text-primary" />
-                        <div>
-                          <CardTitle className="text-base">{dept}</CardTitle>
-                          <p className="text-xs text-muted-foreground">{deptCount} student(s)</p>
-                        </div>
+              return (
+                <>
+                  {/* Department header */}
+                  <TableRow
+                    key={`dept-${dept}`}
+                    className="bg-muted/30 hover:bg-muted/40 cursor-pointer border-t-2 border-border"
+                    onClick={() => toggleDept(dept)}
+                  >
+                    <TableCell className="px-3">
+                      <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isDeptExpanded ? "rotate-90" : ""}`} />
+                    </TableCell>
+                    <TableCell colSpan={5}>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-primary" />
+                        <span className="font-semibold text-foreground">{dept}</span>
+                        <Badge variant="secondary" className="text-xs">{deptCount}</Badge>
                       </div>
-                      <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${isDeptOpen ? "rotate-180" : ""}`} />
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3 pt-0">
-                    {Array.from(levelMap.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([level, studs]) => {
-                      const levelKey = `${dept}-${level}`;
-                      const isLevelOpen = openGroups.has(levelKey);
+                    </TableCell>
+                  </TableRow>
+                  {isDeptExpanded && Array.from(levelMap.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([level, studs]) => {
+                    const levelKey = `${dept}|${level}`;
+                    const isLevelExpanded = expandedLevels.has(levelKey);
 
-                      return (
-                        <Collapsible key={levelKey} open={isLevelOpen} onOpenChange={() => toggleGroup(levelKey)}>
-                          <CollapsibleTrigger asChild>
-                            <div className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 cursor-pointer">
-                              <span className="text-sm font-medium">{level} <span className="text-muted-foreground font-normal">({studs.length})</span></span>
-                              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isLevelOpen ? "rotate-180" : ""}`} />
+                    return (
+                      <>
+                        {/* Level sub-header */}
+                        <TableRow
+                          key={`lvl-${levelKey}`}
+                          className="bg-muted/15 hover:bg-muted/25 cursor-pointer"
+                          onClick={() => toggleLevel(levelKey)}
+                        >
+                          <TableCell></TableCell>
+                          <TableCell className="px-3">
+                            <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${isLevelExpanded ? "rotate-90" : ""}`} />
+                          </TableCell>
+                          <TableCell colSpan={4}>
+                            <div className="flex items-center gap-2">
+                              <GraduationCap className="w-3.5 h-3.5 text-accent" />
+                              <span className="text-sm font-medium text-foreground">{level}</span>
+                              <span className="text-xs text-muted-foreground">({studs.length})</span>
                             </div>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent>
-                            <ScrollArea className="max-h-[300px]">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead className="w-10">
-                                      <Checkbox
-                                        checked={studs.every(s => selected.has(s.id))}
-                                        onCheckedChange={() => {
-                                          const allSelected = studs.every(s => selected.has(s.id));
-                                          setSelected(prev => {
-                                            const next = new Set(prev);
-                                            studs.forEach(s => allSelected ? next.delete(s.id) : next.add(s.id));
-                                            return next;
-                                          });
-                                        }}
-                                      />
-                                    </TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Reg. Number</TableHead>
-                                    <TableHead>Last Login</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {studs.map((s) => (
-                                    <TableRow key={s.id}>
-                                      <TableCell><Checkbox checked={selected.has(s.id)} onCheckedChange={() => toggleSelect(s.id)} /></TableCell>
-                                      <TableCell className="font-medium">{s.name}</TableCell>
-                                      <TableCell className="font-mono text-sm">{s.regNumber}</TableCell>
-                                      <TableCell className="text-muted-foreground text-sm">
-                                        {s.lastLogin ? new Date(s.lastLogin).toLocaleString("en-NG", { timeZone: "Africa/Lagos" }) : "—"}
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        <div className="flex justify-end gap-1">
-                                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPreviewStudent(s)}><Eye className="w-4 h-4" /></Button>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditStudent(s)}><Pencil className="w-4 h-4" /></Button>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteStudent(s)}><Trash2 className="w-4 h-4" /></Button>
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </ScrollArea>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          );
-        })}
-        {grouped.size === 0 && (
-          <div className="text-center py-12 text-muted-foreground">No students found</div>
-        )}
+                          </TableCell>
+                        </TableRow>
+                        {/* Student rows */}
+                        {isLevelExpanded && studs.map(s => (
+                          <TableRow key={s.id} className="hover:bg-muted/10">
+                            <TableCell></TableCell>
+                            <TableCell>
+                              <Checkbox checked={selected.has(s.id)} onCheckedChange={() => toggleSelect(s.id)} />
+                            </TableCell>
+                            <TableCell className="font-medium">{s.name}</TableCell>
+                            <TableCell className="font-mono text-sm">{s.regNumber}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {s.lastLogin ? new Date(s.lastLogin).toLocaleString("en-NG", { timeZone: "Africa/Lagos" }) : "—"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setPreviewStudent(s); }}><Eye className="w-4 h-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setEditStudent(s); }}><Pencil className="w-4 h-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteStudent(s); }}><Trash2 className="w-4 h-4" /></Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </>
+                    );
+                  })}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
 
       {/* Preview Dialog */}

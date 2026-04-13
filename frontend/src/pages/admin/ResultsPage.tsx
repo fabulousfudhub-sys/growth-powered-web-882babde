@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import type { ExamAttempt, Exam, Course } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -10,12 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Download, BarChart3, Search, TrendingUp, Users, CheckCircle, ChevronDown, BookOpen,
+  Download, BarChart3, Search, TrendingUp, Users, CheckCircle, BookOpen, ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,17 +27,19 @@ interface ExtendedAttempt extends ExamAttempt {
   level?: string;
 }
 
+interface StudentResult {
+  studentName: string;
+  regNumber: string;
+  caScores: { caNumber: number; score: number; totalMarks: number }[];
+  examScore?: { score: number; totalMarks: number };
+  department?: string;
+  level?: string;
+}
+
 interface CourseGroup {
   courseCode: string;
   courseId: string;
-  students: Map<string, {
-    studentName: string;
-    regNumber: string;
-    caScores: { caNumber: number; score: number; totalMarks: number }[];
-    examScore?: { score: number; totalMarks: number };
-    department?: string;
-    level?: string;
-  }>;
+  students: Map<string, StudentResult>;
 }
 
 export default function ResultsPage() {
@@ -52,20 +49,20 @@ export default function ResultsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [search, setSearch] = useState("");
   const [filterCourse, setFilterCourse] = useState("all");
-  const [openCourses, setOpenCourses] = useState<Set<string>>(new Set());
+  const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api.getAttempts().then(setAttempts);
-    api.getCourses().then(setCourses);
+    api.getAttempts().then(setAttempts).catch(() => toast.error("Could not load results"));
+    api.getCourses().then(setCourses).catch(() => {});
     if (user?.role === "examiner") {
-      api.getExams(user.department).then(setExams);
+      api.getExams(user.department).then(setExams).catch(() => {});
     } else if (user?.role === "instructor") {
       api.getCourses().then((cs) => {
         const myCourses = cs.filter((c) => c.instructorId === user.id).map((c) => c.code);
-        api.getExams().then((allExams) => setExams(allExams.filter((e) => myCourses.includes(e.course))));
-      });
+        api.getExams().then((allExams) => setExams(allExams.filter((e) => myCourses.includes(e.course)))).catch(() => {});
+      }).catch(() => {});
     } else {
-      api.getExams().then(setExams);
+      api.getExams().then(setExams).catch(() => {});
     }
   }, [user]);
 
@@ -90,7 +87,6 @@ export default function ResultsPage() {
       ? Math.round(roleFilteredAttempts.reduce((sum, a) => sum + (a.score || 0), 0) / roleFilteredAttempts.length)
       : 0;
 
-  // Course-wise grouped view
   const courseGroups = useMemo(() => {
     const groups = new Map<string, CourseGroup>();
     for (const a of filteredAttempts) {
@@ -113,20 +109,24 @@ export default function ResultsPage() {
       }
       const student = group.students.get(studentKey)!;
       if (ext.examType === "ca") {
-        student.caScores.push({
-          caNumber: ext.caNumber || 1,
-          score: ext.score || 0,
-          totalMarks: ext.totalMarks || 0,
-        });
+        // Avoid duplicate CA entries
+        const existing = student.caScores.find(c => c.caNumber === (ext.caNumber || 1));
+        if (!existing) {
+          student.caScores.push({
+            caNumber: ext.caNumber || 1,
+            score: ext.score || 0,
+            totalMarks: ext.totalMarks || 0,
+          });
+        }
       } else {
         student.examScore = { score: ext.score || 0, totalMarks: ext.totalMarks || 0 };
       }
     }
-    return Array.from(groups.values());
+    return Array.from(groups.values()).sort((a, b) => a.courseCode.localeCompare(b.courseCode));
   }, [filteredAttempts]);
 
-  const toggleCourseOpen = (code: string) => {
-    setOpenCourses(prev => {
+  const toggleCourse = (code: string) => {
+    setExpandedCourses(prev => {
       const next = new Set(prev);
       next.has(code) ? next.delete(code) : next.add(code);
       return next;
@@ -134,23 +134,28 @@ export default function ResultsPage() {
   };
 
   const handleExport = () => {
-    const rows: string[] = ["Student Name,Reg. Number,Course,CA Score,Exam Score,Total"];
-    for (const group of courseGroups) {
-      for (const [, student] of group.students) {
-        const caTotal = student.caScores.reduce((sum, ca) => sum + ca.score, 0);
-        const examTotal = student.examScore?.score || 0;
-        const combined = caTotal + examTotal;
-        rows.push(`"${student.studentName}","${student.regNumber}","${group.courseCode}",${caTotal},${examTotal},${combined}`);
+    try {
+      const rows: string[] = ["Student Name,Reg. Number,Department,Level,Course,CA1,CA2,Exam Score,Total"];
+      for (const group of courseGroups) {
+        for (const [, student] of group.students) {
+          const ca1 = student.caScores.find(c => c.caNumber === 1);
+          const ca2 = student.caScores.find(c => c.caNumber === 2);
+          const caTotal = student.caScores.reduce((sum, ca) => sum + ca.score, 0);
+          const examTotal = student.examScore?.score || 0;
+          rows.push(`"${student.studentName}","${student.regNumber}","${student.department || "—"}","${student.level || "—"}","${group.courseCode}",${ca1?.score ?? "—"},${ca2?.score ?? "—"},${examTotal},${caTotal + examTotal}`);
+        }
       }
+      const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const el = document.createElement("a");
+      el.href = url;
+      el.download = "exam_results.csv";
+      el.click();
+      URL.revokeObjectURL(url);
+      toast.success("Results exported");
+    } catch {
+      toast.error("Failed to export results");
     }
-    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const el = document.createElement("a");
-    el.href = url;
-    el.download = "exam_results.csv";
-    el.click();
-    URL.revokeObjectURL(url);
-    toast.success("Results exported");
   };
 
   const uniqueCourses = [...new Set(roleFilteredAttempts.map(a => (a as any).courseCode).filter(Boolean))].sort();
@@ -161,7 +166,7 @@ export default function ResultsPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Results</h1>
           <p className="text-sm text-muted-foreground">
-            {user?.role === "instructor" ? "Results for your courses" : "View exam results grouped by course"}
+            {user?.role === "instructor" ? "Results for your courses" : "Exam results grouped by course"}
           </p>
         </div>
         <Button variant="outline" className="gap-2" onClick={handleExport}>
@@ -170,34 +175,16 @@ export default function ResultsPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="stat-card">
-          <Users className="w-5 h-5 text-accent mb-2" />
-          <p className="text-2xl font-bold text-foreground">{roleFilteredAttempts.length}</p>
-          <p className="text-xs text-muted-foreground mt-1">Total Submissions</p>
-        </div>
-        <div className="stat-card">
-          <TrendingUp className="w-5 h-5 text-primary mb-2" />
-          <p className="text-2xl font-bold text-foreground">{avgScore}%</p>
-          <p className="text-xs text-muted-foreground mt-1">Average Score</p>
-        </div>
-        <div className="stat-card">
-          <CheckCircle className="w-5 h-5 text-success mb-2" />
-          <p className="text-2xl font-bold text-foreground">{roleFilteredAttempts.filter((a) => a.status === "graded").length}</p>
-          <p className="text-xs text-muted-foreground mt-1">Graded</p>
-        </div>
-        <div className="stat-card">
-          <BarChart3 className="w-5 h-5 text-warning mb-2" />
-          <p className="text-2xl font-bold text-foreground">{exams.length}</p>
-          <p className="text-xs text-muted-foreground mt-1">Exams</p>
-        </div>
+        <div className="stat-card"><Users className="w-5 h-5 text-accent mb-2" /><p className="text-2xl font-bold text-foreground">{roleFilteredAttempts.length}</p><p className="text-xs text-muted-foreground mt-1">Total Submissions</p></div>
+        <div className="stat-card"><TrendingUp className="w-5 h-5 text-primary mb-2" /><p className="text-2xl font-bold text-foreground">{avgScore}%</p><p className="text-xs text-muted-foreground mt-1">Average Score</p></div>
+        <div className="stat-card"><CheckCircle className="w-5 h-5 text-success mb-2" /><p className="text-2xl font-bold text-foreground">{roleFilteredAttempts.filter((a) => a.status === "graded").length}</p><p className="text-xs text-muted-foreground mt-1">Graded</p></div>
+        <div className="stat-card"><BarChart3 className="w-5 h-5 text-warning mb-2" /><p className="text-2xl font-bold text-foreground">{exams.length}</p><p className="text-xs text-muted-foreground mt-1">Exams</p></div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative max-w-xs flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search by student name, matric, or course..." className="pl-10"
-            value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder="Search student, matric, or course..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Select value={filterCourse} onValueChange={setFilterCourse}>
           <SelectTrigger className="w-44"><SelectValue placeholder="Filter by course" /></SelectTrigger>
@@ -208,94 +195,81 @@ export default function ResultsPage() {
         </Select>
       </div>
 
-      {/* Course-wise grouped results */}
-      <div className="space-y-4">
-        {courseGroups.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">No results found</div>
-        )}
-        {courseGroups.map(group => {
-          const isOpen = openCourses.has(group.courseCode);
-          const hasCa = Array.from(group.students.values()).some(s => s.caScores.length > 0);
+      {/* Nested data table */}
+      <div className="border border-border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-8"></TableHead>
+              <TableHead>Student</TableHead>
+              <TableHead>Reg. No.</TableHead>
+              <TableHead>Dept / Level</TableHead>
+              <TableHead>CA1</TableHead>
+              <TableHead>CA2</TableHead>
+              <TableHead>Exam</TableHead>
+              <TableHead>Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {courseGroups.length === 0 && (
+              <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No results found</TableCell></TableRow>
+            )}
+            {courseGroups.map(group => {
+              const isExpanded = expandedCourses.has(group.courseCode);
+              const studentCount = group.students.size;
+              const studentsArr = Array.from(group.students.entries());
 
-          return (
-            <Collapsible key={group.courseCode} open={isOpen} onOpenChange={() => toggleCourseOpen(group.courseCode)}>
-              <Card className="border-border/40">
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <BookOpen className="w-5 h-5 text-primary" />
-                        <div>
-                          <CardTitle className="text-base">{group.courseCode}</CardTitle>
-                          <p className="text-xs text-muted-foreground">
-                            {group.students.size} student(s)
-                          </p>
-                        </div>
+              return (
+                <>
+                  {/* Course header row */}
+                  <TableRow
+                    key={`hdr-${group.courseCode}`}
+                    className="bg-muted/30 hover:bg-muted/40 cursor-pointer border-t-2 border-border"
+                    onClick={() => toggleCourse(group.courseCode)}
+                  >
+                    <TableCell className="w-8 px-3">
+                      <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                    </TableCell>
+                    <TableCell colSpan={7}>
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-primary" />
+                        <span className="font-semibold text-foreground">{group.courseCode}</span>
+                        <Badge variant="secondary" className="text-xs ml-2">{studentCount} student{studentCount !== 1 ? "s" : ""}</Badge>
                       </div>
-                      <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="p-0">
-                    <ScrollArea className="max-h-[400px]">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead>Student</TableHead>
-                            <TableHead>Reg. No.</TableHead>
-                            {hasCa && <TableHead>CA Score</TableHead>}
-                            <TableHead>Exam Score</TableHead>
-                            <TableHead>Total</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {Array.from(group.students.entries()).map(([studentId, student]) => {
-                            const caTotal = student.caScores.reduce((sum, ca) => sum + ca.score, 0);
-                            const examScore = student.examScore?.score || 0;
-                            const combined = caTotal + examScore;
+                    </TableCell>
+                  </TableRow>
+                  {/* Student rows */}
+                  {isExpanded && studentsArr.map(([studentId, student]) => {
+                    const ca1 = student.caScores.find(c => c.caNumber === 1);
+                    const ca2 = student.caScores.find(c => c.caNumber === 2);
+                    const caTotal = student.caScores.reduce((sum, ca) => sum + ca.score, 0);
+                    const examScore = student.examScore?.score || 0;
+                    const combined = caTotal + examScore;
 
-                            return (
-                              <TableRow key={studentId}>
-                                <TableCell className="font-medium">{student.studentName}</TableCell>
-                                <TableCell className="font-mono text-sm">{student.regNumber}</TableCell>
-                                {hasCa && (
-                                  <TableCell>
-                                    {student.caScores.length > 0 ? (
-                                      <div className="space-y-0.5">
-                                        {student.caScores
-                                          .sort((a, b) => a.caNumber - b.caNumber)
-                                          .map((ca, i) => (
-                                            <span key={i} className="font-mono text-sm block">
-                                              CA{ca.caNumber}: {ca.score}/{ca.totalMarks}
-                                            </span>
-                                          ))}
-                                      </div>
-                                    ) : <span className="text-muted-foreground">—</span>}
-                                  </TableCell>
-                                )}
-                                <TableCell className="font-mono text-sm">
-                                  {student.examScore
-                                    ? `${student.examScore.score}/${student.examScore.totalMarks}`
-                                    : <span className="text-muted-foreground">—</span>}
-                                </TableCell>
-                                <TableCell>
-                                  <span className={`font-mono font-semibold ${combined >= 50 ? "text-success" : "text-destructive"}`}>
-                                    {combined}
-                                  </span>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          );
-        })}
+                    return (
+                      <TableRow key={`${group.courseCode}-${studentId}`} className="hover:bg-muted/20">
+                        <TableCell></TableCell>
+                        <TableCell className="font-medium">{student.studentName}</TableCell>
+                        <TableCell className="font-mono text-sm">{student.regNumber}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{student.department || "—"} / {student.level || "—"}</TableCell>
+                        <TableCell className="font-mono text-sm">{ca1 ? `${ca1.score}/${ca1.totalMarks}` : "—"}</TableCell>
+                        <TableCell className="font-mono text-sm">{ca2 ? `${ca2.score}/${ca2.totalMarks}` : "—"}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {student.examScore ? `${student.examScore.score}/${student.examScore.totalMarks}` : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <span className={`font-mono font-semibold ${combined >= 50 ? "text-success" : "text-destructive"}`}>
+                            {combined}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
