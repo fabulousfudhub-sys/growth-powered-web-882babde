@@ -1084,7 +1084,7 @@ async function handleAttemptStatus(user: any, attemptId: string) {
 
 // ───────────────────────── MAIN ROUTER ─────────────────────────
 
-Deno.serve(async (req: Request) => {
+Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
