@@ -169,6 +169,7 @@ async function start() {
 
   // Background services
   startSyncService();
+  try { startAutoBackup(); } catch (e) { console.warn('[BACKUP] startAutoBackup error:', e.message); }
 
   setInterval(runExamScheduler, 30000);
   runExamScheduler();
