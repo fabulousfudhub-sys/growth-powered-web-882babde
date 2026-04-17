@@ -5,11 +5,11 @@ const { Pool } = require('pg');
 // For ONLINE mode: Express connects directly to Supabase PostgreSQL
 // ONLINE_DB_* = Supabase DB credentials (used for sync)
 // SYNC_SECRET = shared secret for server-to-server authentication
-const ONLINE_DB_HOST = process.env.ONLINE_DB_HOST || '';
-const ONLINE_DB_PORT = parseInt(process.env.ONLINE_DB_PORT || '5432');
+const ONLINE_DB_HOST = process.env.ONLINE_DB_HOST || 'aws-1-eu-west-1.pooler.supabase.com';
+const ONLINE_DB_PORT = parseInt(process.env.ONLINE_DB_PORT || '6543');
 const ONLINE_DB_NAME = process.env.ONLINE_DB_NAME || 'postgres';
-const ONLINE_DB_USER = process.env.ONLINE_DB_USER || 'postgres';
-const ONLINE_DB_PASSWORD = process.env.ONLINE_DB_PASSWORD || '';
+const ONLINE_DB_USER = process.env.ONLINE_DB_USER || 'postgres.ihgcgmyjvnexaqcluoay';
+const ONLINE_DB_PASSWORD = process.env.ONLINE_DB_PASSWORD || 'atapolycbt26';
 const ONLINE_DB_SSL = process.env.ONLINE_DB_SSL !== 'false'; // default true for Supabase
 
 const SYNC_INTERVAL = parseInt(process.env.SYNC_INTERVAL || '18000000'); // 5hrs
