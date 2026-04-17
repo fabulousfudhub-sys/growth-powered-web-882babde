@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import type { Department, Course, Exam } from '@/lib/types';
 import { toast } from 'sonner';
@@ -142,6 +143,25 @@ export default function EditExamDialog({ open, onOpenChange, exam }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2"><Label>End Date</Label><Input type="date" value={form.endDate} onChange={e => update('endDate', e.target.value)} /></div>
             <div className="space-y-2"><Label>End Time</Label><Input type="time" value={form.endTime} onChange={e => update('endTime', e.target.value)} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Semester</Label>
+              <Select value={form.semester} onValueChange={v => update('semester', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="first">First Semester</SelectItem>
+                  <SelectItem value="second">Second Semester</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label className="text-sm">Display Result</Label>
+                <p className="text-xs text-muted-foreground">Show students their score</p>
+              </div>
+              <Switch checked={form.showResult} onCheckedChange={v => update('showResult', v)} />
+            </div>
           </div>
           <div className="space-y-2"><Label>Instructions</Label><Textarea rows={3} value={form.instructions} onChange={e => update('instructions', e.target.value)} /></div>
         </div>
