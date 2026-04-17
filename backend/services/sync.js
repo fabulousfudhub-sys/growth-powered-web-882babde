@@ -46,6 +46,8 @@ const TABLES_WITH_SYNC_FLAG = new Set([
   'courses',
   'questions',
   'exams',
+  'exam_questions',
+  'exam_pins',
   'exam_attempts',
   'answers',
 ]);
@@ -116,6 +118,8 @@ async function getPushCandidates(client, tableName, limit) {
       return [];
     }
   }
+
+
 
   if (tableName === 'exam_pins') {
     const { rows } = await client.query(
@@ -337,6 +341,7 @@ async function pushOnly() {
         if (records.length === 0) continue;
 
         try {
+          console.log(`[SYNC] pushing ${tableName}`, records.length);
           await pushToOnlineServer(tableName, records);
           const ids = records.map((r) => r.id).filter(Boolean);
           await markAsSynced(client, tableName, ids.filter(isUuid));
@@ -438,6 +443,7 @@ async function syncNow() {
         if (records.length === 0) continue;
 
         try {
+          console.log(`[SYNC] pushing ${tableName}`, records.length);
           await pushToOnlineServer(tableName, records);
           const ids = records.map((r) => r.id).filter(Boolean);
           await markAsSynced(client, tableName, ids.filter(isUuid));
