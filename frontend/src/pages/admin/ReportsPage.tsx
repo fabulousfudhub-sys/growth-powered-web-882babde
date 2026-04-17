@@ -29,12 +29,14 @@ interface ReportRow {
   caNumber: number;
   department: string;
   level: string;
+  semester: string;
 }
 
 export default function ReportsPage() {
   const [school, setSchool] = useState("all");
   const [department, setDepartment] = useState("all");
   const [courseFilter, setCourseFilter] = useState("all");
+  const [semester, setSemester] = useState("all");
   const [reportType, setReportType] = useState("");
   const [exportFormat, setExportFormat] = useState("csv");
   const [schools, setSchools] = useState<School[]>([]);
@@ -73,10 +75,12 @@ export default function ReportsPage() {
         caNumber: a.caNumber || 1,
         department: a.department || "—",
         level: a.level || "—",
+        semester: a.semester || "",
       }));
       let filtered = rows;
       if (courseFilter !== "all") filtered = filtered.filter(r => r.courseCode === courseFilter);
       if (department !== "all") filtered = filtered.filter(r => r.department === department);
+      if (semester !== "all") filtered = filtered.filter(r => r.semester === semester);
       setReportData(filtered);
       setGenerated(true);
       toast.success(`Report generated with ${filtered.length} records`);
@@ -163,7 +167,7 @@ export default function ReportsPage() {
       <Card className="border-border/40">
         <CardHeader><CardTitle className="text-base">Generate Report</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label>Course</Label>
               <Select value={courseFilter} onValueChange={setCourseFilter}>
@@ -171,6 +175,17 @@ export default function ReportsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Courses</SelectItem>
                   {courses.map(c => <SelectItem key={c.id} value={c.code}>{c.code} - {c.title}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Semester</Label>
+              <Select value={semester} onValueChange={setSemester}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Semesters</SelectItem>
+                  <SelectItem value="first">First Semester</SelectItem>
+                  <SelectItem value="second">Second Semester</SelectItem>
                 </SelectContent>
               </Select>
             </div>
