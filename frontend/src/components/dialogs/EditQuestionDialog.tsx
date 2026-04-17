@@ -7,8 +7,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { api } from '@/lib/api';
 import type { Question, Course } from '@/lib/types';
-import { ImagePlus, X } from 'lucide-react';
+import { ImagePlus, X, History } from 'lucide-react';
 import { toast } from 'sonner';
+import QuestionVersionHistoryDialog from './QuestionVersionHistoryDialog';
 
 interface Props {
   open: boolean;
@@ -27,6 +28,7 @@ export default function EditQuestionDialog({ open, onOpenChange, question }: Pro
   const [imageUrl, setImageUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     if (open) api.getCourses().then(setCourses).catch(() => {});
@@ -75,7 +77,19 @@ export default function EditQuestionDialog({ open, onOpenChange, question }: Pro
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Edit Question</DialogTitle><DialogDescription>Modify the question details</DialogDescription></DialogHeader>
+        <DialogHeader>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <DialogTitle>Edit Question</DialogTitle>
+              <DialogDescription>Modify the question details</DialogDescription>
+            </div>
+            {question && (
+              <Button variant="ghost" size="sm" onClick={() => setHistoryOpen(true)}>
+                <History className="w-4 h-4 mr-1.5" /> History
+              </Button>
+            )}
+          </div>
+        </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -157,6 +171,11 @@ export default function EditQuestionDialog({ open, onOpenChange, question }: Pro
           <Button onClick={handleSave} disabled={saving || !text.trim()}>{saving ? 'Saving...' : 'Save Changes'}</Button>
         </DialogFooter>
       </DialogContent>
+      <QuestionVersionHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        questionId={question?.id || null}
+      />
     </Dialog>
   );
 }

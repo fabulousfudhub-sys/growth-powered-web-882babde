@@ -253,6 +253,7 @@ export const api = {
   async loginStudent(
     matricNumber: string,
     examPin: string,
+    deviceFingerprint?: string,
   ): Promise<{
     user: User;
     exam: Exam;
@@ -270,7 +271,10 @@ export const api = {
         resumed?: boolean;
       }>("/api/auth/student/login", {
         method: "POST",
-        body: JSON.stringify({ matricNumber, examPin }),
+        body: JSON.stringify({ matricNumber, examPin, deviceFingerprint }),
+        headers: deviceFingerprint
+          ? { "x-device-fingerprint": deviceFingerprint }
+          : undefined,
       });
       setAuthToken(res.token);
       return {

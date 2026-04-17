@@ -23,6 +23,8 @@ import {
   Key,
   Wifi,
   WifiOff,
+  Activity,
+  Archive,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -71,6 +73,8 @@ const menuMap: Record<string, MenuSection[]> = {
       { title: "Users", url: "/admin/users", icon: Users },
       { title: "Sync Center", url: "/admin/sync", icon: RefreshCw },
       { title: "Network", url: "/admin/network", icon: Monitor },
+      { title: "System Health", url: "/admin/system-health", icon: Activity },
+      { title: "Backups", url: "/admin/backups", icon: Archive },
       { title: "Reports", url: "/admin/reports", icon: FileText },
       { title: "Audit Log", url: "/admin/audit-log", icon: ScrollText },
       { title: "Settings", url: "/admin/settings", icon: Settings },
