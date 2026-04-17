@@ -259,6 +259,7 @@ router.get('/results', authenticate, async (req, res) => {
                         u.name as "studentName", u.reg_number as "regNumber",
                         e.title as "examTitle", c.code as "courseCode", c.id as "courseId",
                         e.exam_type as "examType", e.ca_number as "caNumber",
+                        e.semester as "semester", e.show_result as "showResult",
                         d.name as "department", e.level,
                         ea.started_at as "startedAt", ea.submitted_at as "submittedAt",
                         ea.score, ea.total_marks as "totalMarks", ea.status,
