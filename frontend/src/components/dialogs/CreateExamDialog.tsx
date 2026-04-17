@@ -376,6 +376,28 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
                 </Select>
               </div>
             )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Semester <span className="text-destructive">*</span></Label>
+                <Select value={form.semester} onValueChange={(v) => update("semester", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="first">First Semester</SelectItem>
+                    <SelectItem value="second">Second Semester</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label className="text-sm">Display Result</Label>
+                  <p className="text-xs text-muted-foreground">Show students their score</p>
+                </div>
+                <Switch
+                  checked={form.showResult}
+                  onCheckedChange={(v) => update("showResult", v)}
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>
                 Department <span className="text-destructive">*</span>
