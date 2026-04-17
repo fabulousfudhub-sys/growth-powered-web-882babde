@@ -1,6 +1,8 @@
 const { Router } = require('express');
 const { pool, getDbInfo } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { resetSystemLockCache } = require('../middleware/systemLock');
+const { invalidateSyncConfigCache } = require('../services/sync');
 
 const router = Router();
 

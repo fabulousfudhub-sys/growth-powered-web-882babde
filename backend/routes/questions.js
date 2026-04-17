@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { pool } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { snapshotQuestion } = require('./questionVersions');
 
 const router = Router();
 
@@ -128,25 +129,35 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner', '
   }
 });
 
-// Update question
+// Update question — snapshots previous version into question_versions before saving
 router.put('/:id', authenticate, requireRole('super_admin', 'admin', 'examiner', 'instructor'), async (req, res) => {
-  const { type, text, options, correctAnswer, difficulty, courseId, imageUrl } = req.body;
+  const { type, text, options, correctAnswer, difficulty, courseId, imageUrl, marks } = req.body;
+  const client = await pool.connect();
   try {
-    await pool.query(
-      `UPDATE questions SET type=$1, text=$2, options=$3, correct_answer=$4, difficulty=$5, course_id=$6, image_url=$7 WHERE id=$8`,
-      [type, text, options ? JSON.stringify(options) : null, correctAnswer ? JSON.stringify(correctAnswer) : null, difficulty, courseId, imageUrl || null, req.params.id]
+    await client.query('BEGIN');
+    try { await snapshotQuestion(client, req.params.id, req.user); } catch (e) { console.warn('[QUESTIONS] snapshot failed:', e.message); }
+    await client.query(
+      `UPDATE questions SET type=$1, text=$2, options=$3, correct_answer=$4, difficulty=$5, course_id=$6, image_url=$7, marks=COALESCE($8, marks), synced=FALSE WHERE id=$9`,
+      [type, text, options ? JSON.stringify(options) : null, correctAnswer ? JSON.stringify(correctAnswer) : null, difficulty, courseId, imageUrl || null, marks ?? null, req.params.id]
     );
+    await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     console.error('Update question error:', err);
     res.status(500).json({ error: 'Failed to update question' });
+  } finally {
+    client.release();
   }
 });
 
-// Delete question
+// Delete question — writes a tombstone for sync delete propagation
 router.delete('/:id', authenticate, requireRole('super_admin', 'admin', 'examiner', 'instructor'), async (req, res) => {
   try {
     await pool.query(`DELETE FROM questions WHERE id = $1`, [req.params.id]);
+    try {
+      await pool.query(`INSERT INTO sync_tombstones (table_name, record_id) VALUES ('questions', $1)`, [req.params.id]);
+    } catch { /* table may not exist */ }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete question' });
