@@ -590,9 +590,20 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
                 )}
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-muted text-sm">
-              <p className="text-muted-foreground">
-                Each question will carry{" "}
+
+            {/* Mark Allocation Summary */}
+            {allocation && (
+              <div className={`p-3 rounded-lg border text-sm space-y-1 ${allocationError ? "bg-destructive/5 border-destructive/30" : "bg-muted border-border"}`}>
+                <p className="text-xs text-muted-foreground font-medium">Mark Allocation for {form.semester === "first" ? "First" : "Second"} Semester · {form.level}</p>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>CA1: <strong>{allocation.existing.ca1}</strong></div>
+                  <div>CA2: <strong>{allocation.existing.ca2}</strong></div>
+                  <div>Exam: <strong>{allocation.existing.exam}</strong></div>
+                </div>
+                <p className="text-xs text-muted-foreground">CA Weight: {allocation.caWeight}% · Exam Weight: {allocation.examWeight}% · Total: {allocation.total}/100</p>
+                {allocationError && <p className="text-xs text-destructive font-medium">⚠ {allocationError}</p>}
+              </div>
+            )}
                 <strong className="text-foreground">
                   {marksPerQuestion} marks
                 </strong>
