@@ -63,6 +63,11 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
   const [courseQuestionCount, setCourseQuestionCount] = useState<number | null>(
     null,
   );
+  const [allocation, setAllocation] = useState<{
+    caWeight: number; examWeight: number; maxCas: number;
+    existing: { ca1: number; ca2: number; exam: number };
+    total: number;
+  } | null>(null);
   const [form, setForm] = useState({
     title: "",
     courseId: "",
@@ -107,6 +112,17 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
       setCourseQuestionCount(null);
     }
   }, [form.courseId]);
+
+  // Fetch existing mark allocation for course/level/semester
+  useEffect(() => {
+    if (form.courseId && form.level && form.semester) {
+      api.getAllocationSummary({
+        courseId: form.courseId, level: form.level, semester: form.semester,
+      }).then(setAllocation).catch(() => setAllocation(null));
+    } else {
+      setAllocation(null);
+    }
+  }, [form.courseId, form.level, form.semester]);
 
   const update = (key: string, val: string | boolean) =>
     setForm((prev) => ({ ...prev, [key]: val as never }));
