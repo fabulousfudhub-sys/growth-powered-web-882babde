@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 import {
   LayoutDashboard,
   Users,
@@ -19,6 +21,8 @@ import {
   Lock,
   Power,
   Key,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
