@@ -12,9 +12,13 @@ const importRoutes = require('./routes/import');
 const settingsRoutes = require('./routes/settings');
 const uploadRoutes = require('./routes/uploads');
 const licenseRoutes = require('./routes/license');
+const healthRoutes = require('./routes/health');
+const backupRoutes = require('./routes/backups');
+const questionVersionRoutes = require('./routes/questionVersions');
 const { startSyncService } = require('./services/sync');
 const { autoSubmitAttempt } = require('./routes/auth');
 const { enforceSystemLock } = require('./middleware/systemLock');
+const { startAutoBackup } = require('./routes/backups');
 const { getCachedLicense } = require('./license/license');
 
 const app = express();
@@ -59,6 +63,9 @@ app.use('/api/import', importRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/license', licenseRoutes);
+app.use('/api/system-health', healthRoutes);
+app.use('/api/backups', backupRoutes);
+app.use('/api/questions', questionVersionRoutes);
 
 // Serve frontend build
 app.use(express.static(path.join(__dirname, 'public')));
