@@ -468,7 +468,26 @@ export const api = {
   async deleteCourse(id: string): Promise<void> {
     await request(`/api/admin/courses/${id}`, { method: "DELETE" });
   },
-
+  async getAllocationSummary(params: {
+    courseId: string;
+    level?: string;
+    semester?: string;
+    excludeExamId?: string;
+  }): Promise<{
+    caWeight: number;
+    examWeight: number;
+    maxCas: number;
+    existing: { ca1: number; ca2: number; exam: number };
+    existingIds: { ca1: string | null; ca2: string | null; exam: string | null };
+    total: number;
+  }> {
+    const qs = new URLSearchParams();
+    qs.set("courseId", params.courseId);
+    if (params.level) qs.set("level", params.level);
+    if (params.semester) qs.set("semester", params.semester);
+    if (params.excludeExamId) qs.set("excludeExamId", params.excludeExamId);
+    return request(`/api/exams/allocation/summary?${qs.toString()}`);
+  },
   // Exams
   async getExams(department?: string): Promise<Exam[]> {
     const params = department

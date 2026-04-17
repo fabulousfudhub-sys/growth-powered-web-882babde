@@ -26,6 +26,7 @@ interface ExtendedAttempt extends ExamAttempt {
   essayScore?: number;
   department?: string;
   level?: string;
+  semester?: string;
 }
 
 interface StudentResult {
@@ -60,6 +61,7 @@ export default function ResultsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [search, setSearch] = useState("");
   const [filterCourse, setFilterCourse] = useState("all");
+  const [filterSemester, setFilterSemester] = useState("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -89,7 +91,8 @@ export default function ResultsPage() {
       ext.courseCode?.toLowerCase().includes(search.toLowerCase())
     );
     const matchCourse = filterCourse === "all" || ext.courseCode === filterCourse;
-    return matchSearch && matchCourse;
+    const matchSemester = filterSemester === "all" || ext.semester === filterSemester;
+    return matchSearch && matchCourse && matchSemester;
   });
 
   const avgScore = roleFilteredAttempts.length > 0
@@ -205,6 +208,14 @@ export default function ResultsPage() {
           <SelectContent>
             <SelectItem value="all">All Courses</SelectItem>
             {uniqueCourses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterSemester} onValueChange={setFilterSemester}>
+          <SelectTrigger className="w-44"><SelectValue placeholder="Filter by semester" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Semesters</SelectItem>
+            <SelectItem value="first">First Semester</SelectItem>
+            <SelectItem value="second">Second Semester</SelectItem>
           </SelectContent>
         </Select>
       </div>

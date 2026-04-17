@@ -63,6 +63,11 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
   const [courseQuestionCount, setCourseQuestionCount] = useState<number | null>(
     null,
   );
+  const [allocation, setAllocation] = useState<{
+    caWeight: number; examWeight: number; maxCas: number;
+    existing: { ca1: number; ca2: number; exam: number };
+    total: number;
+  } | null>(null);
   const [form, setForm] = useState({
     title: "",
     courseId: "",
@@ -108,6 +113,17 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
     }
   }, [form.courseId]);
 
+  // Fetch existing mark allocation for course/level/semester
+  useEffect(() => {
+    if (form.courseId && form.level && form.semester) {
+      api.getAllocationSummary({
+        courseId: form.courseId, level: form.level, semester: form.semester,
+      }).then(setAllocation).catch(() => setAllocation(null));
+    } else {
+      setAllocation(null);
+    }
+  }, [form.courseId, form.level, form.semester]);
+
   const update = (key: string, val: string | boolean) =>
     setForm((prev) => ({ ...prev, [key]: val as never }));
 
@@ -149,16 +165,35 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
   // Validation: questionsToAnswer < totalQuestions (in bank) <= courseQuestionCount
   const totalQNum = parseInt(form.totalQuestions) || 0;
   const toAnswerNum = parseInt(form.questionsToAnswer) || 0;
+  const totalMarksNum = parseFloat(form.totalMarks) || 0;
   const bankValid =
     courseQuestionCount === null || totalQNum <= courseQuestionCount;
   const answerValid = toAnswerNum > 0 && toAnswerNum <= totalQNum;
+
+  // Mark allocation validation (CA1+CA2+Exam ≤ 100, CAs ≤ caWeight, Exam ≤ examWeight)
+  let allocationError = "";
+  if (allocation) {
+    const projCa1 = allocation.existing.ca1 + (form.examType === "ca" && form.caNumber === "1" ? totalMarksNum : 0);
+    const projCa2 = allocation.existing.ca2 + (form.examType === "ca" && form.caNumber === "2" ? totalMarksNum : 0);
+    const projExam = allocation.existing.exam + (form.examType === "exam" ? totalMarksNum : 0);
+    if (projCa1 + projCa2 > allocation.caWeight) {
+      allocationError = `CA1 + CA2 (${projCa1 + projCa2}) cannot exceed CA weight of ${allocation.caWeight}%`;
+    } else if (projExam > allocation.examWeight) {
+      allocationError = `Exam total (${projExam}) cannot exceed Exam weight of ${allocation.examWeight}%`;
+    } else if (projCa1 + projCa2 + projExam > 100) {
+      allocationError = `CA1 + CA2 + Exam total (${projCa1 + projCa2 + projExam}) cannot exceed 100`;
+    }
+  }
+  const allocationValid = !allocationError;
+
   const canProceedStep2 =
     form.duration &&
     form.totalQuestions &&
     form.questionsToAnswer &&
     form.totalMarks &&
     bankValid &&
-    answerValid;
+    answerValid &&
+    allocationValid;
 
   const searchCarryover = async (q: string) => {
     setCarryoverSearch(q);
@@ -248,6 +283,7 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
     setEnableCarryover(false);
     setCarryoverStudents([]);
     setCourseQuestionCount(null);
+    setAllocation(null);
     setForm({
       title: "",
       courseId: "",
@@ -555,6 +591,21 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
                 )}
               </div>
             </div>
+
+            {/* Mark Allocation Summary */}
+            {allocation && (
+              <div className={`p-3 rounded-lg border text-sm space-y-1 ${allocationError ? "bg-destructive/5 border-destructive/30" : "bg-muted border-border"}`}>
+                <p className="text-xs text-muted-foreground font-medium">Mark Allocation for {form.semester === "first" ? "First" : "Second"} Semester · {form.level}</p>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>CA1: <strong>{allocation.existing.ca1}</strong></div>
+                  <div>CA2: <strong>{allocation.existing.ca2}</strong></div>
+                  <div>Exam: <strong>{allocation.existing.exam}</strong></div>
+                </div>
+                <p className="text-xs text-muted-foreground">CA Weight: {allocation.caWeight}% · Exam Weight: {allocation.examWeight}% · Total: {allocation.total}/100</p>
+                {allocationError && <p className="text-xs text-destructive font-medium">⚠ {allocationError}</p>}
+              </div>
+            )}
+
             <div className="p-3 rounded-lg bg-muted text-sm">
               <p className="text-muted-foreground">
                 Each question will carry{" "}
