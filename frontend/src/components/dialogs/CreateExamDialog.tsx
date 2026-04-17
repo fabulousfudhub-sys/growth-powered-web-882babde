@@ -79,6 +79,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
     instructions: "",
     examType: "exam" as "exam" | "ca",
     caNumber: "1",
+    semester: "first" as "first" | "second",
+    showResult: true,
   });
 
   useEffect(() => {
@@ -106,8 +108,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
     }
   }, [form.courseId]);
 
-  const update = (key: string, val: string) =>
-    setForm((prev) => ({ ...prev, [key]: val }));
+  const update = (key: string, val: string | boolean) =>
+    setForm((prev) => ({ ...prev, [key]: val as never }));
 
   const filteredCourses = form.departmentId
     ? courses.filter(
@@ -211,6 +213,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
         carryoverStudentIds: carryoverStudents.map((s) => s.id),
         examType: form.examType,
         caNumber: form.examType === "ca" ? parseInt(form.caNumber) : undefined,
+        semester: form.semester,
+        showResult: form.showResult,
       });
       setQuestionsAssigned(result.questionsAssigned || 0);
 
@@ -260,6 +264,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
       instructions: "",
       examType: "exam",
       caNumber: "1",
+      semester: "first",
+      showResult: true,
     });
   };
 
@@ -370,6 +376,28 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
                 </Select>
               </div>
             )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Semester <span className="text-destructive">*</span></Label>
+                <Select value={form.semester} onValueChange={(v) => update("semester", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="first">First Semester</SelectItem>
+                    <SelectItem value="second">Second Semester</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div>
+                  <Label className="text-sm">Display Result</Label>
+                  <p className="text-xs text-muted-foreground">Show students their score</p>
+                </div>
+                <Switch
+                  checked={form.showResult}
+                  onCheckedChange={(v) => update("showResult", v)}
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>
                 Department <span className="text-destructive">*</span>

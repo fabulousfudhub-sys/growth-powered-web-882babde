@@ -142,6 +142,12 @@ async function start() {
 
   // Continue normal startup
   await testConnection();
+  try {
+    const { runMigrations } = require('./db/migrate');
+    await runMigrations();
+  } catch (e) {
+    console.warn('[MIGRATE] error:', e.message);
+  }
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🎓 ATAPOLY CBT Server running on http://0.0.0.0:${PORT}`);

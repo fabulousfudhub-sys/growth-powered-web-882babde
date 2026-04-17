@@ -501,6 +501,8 @@ export const api = {
     pinMode?: string;
     examType?: string;
     caNumber?: number;
+    semester?: string | null;
+    showResult?: boolean;
   }): Promise<{ id: string; questionsAssigned: number }> {
     return request("/api/exams", {
       method: "POST",

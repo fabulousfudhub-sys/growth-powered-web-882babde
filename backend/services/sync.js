@@ -2,11 +2,14 @@ const { pool } = require('../db/pool');
 
 const ONLINE_SERVER_URL = process.env.ONLINE_SERVER_URL || 'https://ihgcgmyjvnexaqcluoay.supabase.co/functions/v1/swift-handler';
 const SYNC_INTERVAL = parseInt(process.env.SYNC_INTERVAL || '18000000'); // 5hrs
+const CONNECTIVITY_POLL_INTERVAL = 30000; // poll every 30s for connectivity changes
 const SYNC_BATCH_SIZE = 200;
 const CONNECTIVITY_TIMEOUT = 5000;
 
 let isSyncing = false;
 let syncTimer = null;
+let connectivityTimer = null;
+let lastKnownOnline = false;
 
 const SYNC_TABLES = [
   'schools',
@@ -577,9 +580,29 @@ function startSyncService() {
   }
 
   console.log(`[SYNC] 2-way background sync enabled (every ${SYNC_INTERVAL / 1000}s) → ${ONLINE_SERVER_URL}`);
+  console.log(`[SYNC] Connectivity polling every ${CONNECTIVITY_POLL_INTERVAL / 1000}s for auto-sync on reconnect`);
 
   setTimeout(syncNow, 5000);
   syncTimer = setInterval(syncNow, SYNC_INTERVAL);
+
+  // Connectivity watcher: triggers a sync the moment we go offline -> online
+  connectivityTimer = setInterval(async () => {
+    try {
+      const isOnline = await checkOnlineConnectivity();
+      if (isOnline && !lastKnownOnline) {
+        console.log('[SYNC] 🌐 Internet detected — triggering auto-sync');
+        lastKnownOnline = true;
+        if (!isSyncing) {
+          syncNow().catch((e) => console.warn('[SYNC] auto-sync error:', e.message));
+        }
+      } else if (!isOnline && lastKnownOnline) {
+        console.log('[SYNC] 📴 Internet lost');
+        lastKnownOnline = false;
+      }
+    } catch {
+      // never crash the watcher
+    }
+  }, CONNECTIVITY_POLL_INTERVAL);
 }
 
 function stopSyncService() {
@@ -587,7 +610,19 @@ function stopSyncService() {
     clearInterval(syncTimer);
     syncTimer = null;
   }
+  if (connectivityTimer) {
+    clearInterval(connectivityTimer);
+    connectivityTimer = null;
+  }
   console.log('[SYNC] Background sync stopped');
 }
 
-module.exports = { syncNow, startSyncService, stopSyncService, getSyncStatus, pushOnly, pullOnly };
+module.exports = {
+  syncNow,
+  startSyncService,
+  stopSyncService,
+  getSyncStatus,
+  pushOnly,
+  pullOnly,
+  checkOnlineConnectivity,
+};

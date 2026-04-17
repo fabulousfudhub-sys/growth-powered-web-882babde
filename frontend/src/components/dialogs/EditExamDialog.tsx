@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import type { Department, Course, Exam } from '@/lib/types';
 import { toast } from 'sonner';
@@ -21,11 +22,14 @@ export default function EditExamDialog({ open, onOpenChange, exam }: Props) {
     title: '', courseId: '', departmentId: '', level: '', status: 'draft',
     duration: '45', totalQuestions: '20', questionsToAnswer: '20', totalMarks: '40',
     startDate: '', startTime: '', endDate: '', endTime: '', instructions: '',
+    semester: 'first' as 'first' | 'second', showResult: true,
+    examType: 'exam' as 'exam' | 'ca', caNumber: '1',
   });
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [saving, setSaving] = useState(false);
-  const update = (key: string, val: string) => setForm(prev => ({ ...prev, [key]: val }));
+  const update = (key: string, val: string | boolean) =>
+    setForm(prev => ({ ...prev, [key]: val as never }));
 
   useEffect(() => {
     if (open && exam) {
@@ -46,6 +50,10 @@ export default function EditExamDialog({ open, onOpenChange, exam }: Props) {
           endDate: endDate ? endDate.toISOString().split('T')[0] : '',
           endTime: endDate ? endDate.toISOString().split('T')[1]?.substring(0, 5) : '',
           instructions: exam.instructions || '',
+          semester: (exam.semester === 'second' ? 'second' : 'first'),
+          showResult: exam.showResult !== false,
+          examType: exam.examType || 'exam',
+          caNumber: String(exam.caNumber || 1),
         });
       });
     }
@@ -68,10 +76,12 @@ export default function EditExamDialog({ open, onOpenChange, exam }: Props) {
         startDate: form.startDate && form.startTime ? `${form.startDate}T${form.startTime}:00` : undefined,
         endDate: form.endDate && form.endTime ? `${form.endDate}T${form.endTime}:00` : undefined,
         instructions: form.instructions, status: form.status,
+        semester: form.semester, showResult: form.showResult,
+        examType: form.examType, caNumber: parseInt(form.caNumber || '1'),
       });
       toast.success('Exam updated');
       onOpenChange(false);
-    } catch (err: any) { toast.error(err.message || 'Failed to update'); }
+    } catch (err: any) { toast.error(err.message || 'Could not update exam. Please verify the inputs.'); }
     finally { setSaving(false); }
   };
 
@@ -133,6 +143,25 @@ export default function EditExamDialog({ open, onOpenChange, exam }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2"><Label>End Date</Label><Input type="date" value={form.endDate} onChange={e => update('endDate', e.target.value)} /></div>
             <div className="space-y-2"><Label>End Time</Label><Input type="time" value={form.endTime} onChange={e => update('endTime', e.target.value)} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Semester</Label>
+              <Select value={form.semester} onValueChange={v => update('semester', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="first">First Semester</SelectItem>
+                  <SelectItem value="second">Second Semester</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label className="text-sm">Display Result</Label>
+                <p className="text-xs text-muted-foreground">Show students their score</p>
+              </div>
+              <Switch checked={form.showResult} onCheckedChange={v => update('showResult', v)} />
+            </div>
           </div>
           <div className="space-y-2"><Label>Instructions</Label><Textarea rows={3} value={form.instructions} onChange={e => update('instructions', e.target.value)} /></div>
         </div>
