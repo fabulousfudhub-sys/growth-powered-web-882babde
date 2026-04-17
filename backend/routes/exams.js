@@ -133,9 +133,12 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
     const finalShowResult = showResult !== false;
     const finalTotalMarks = parseFloat(totalMarks) || 0;
 
-    // ── Mark allocation guard: CA1 + CA2 + Exam must not exceed 100; weights enforced ──
+    // ── Mark allocation guard: CA1 + CA2 + Exam must not exceed 100; weights enforced.
+    //    Includes ALL exams (incl. completed) so admins cannot bypass by stopping prior exams.
     const allocParams = [courseId];
-    let allocWhere = `course_id = $1 AND status != 'completed'`;
+    let allocWhere = `course_id = $1`;
+    if (level) { allocParams.push(level); allocWhere += ` AND level = $${allocParams.length}`; }
+    if (finalSemester) { allocParams.push(finalSemester); allocWhere += ` AND semester = $${allocParams.length}`; }
     if (level) { allocParams.push(level); allocWhere += ` AND level = $${allocParams.length}`; }
     if (finalSemester) { allocParams.push(finalSemester); allocWhere += ` AND semester = $${allocParams.length}`; }
 
