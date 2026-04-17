@@ -265,10 +265,16 @@ router.put('/:id', authenticate, requireRole('super_admin', 'admin', 'examiner')
   }
 });
 
-// Delete exam
+// Delete exam — also writes a tombstone for sync delete-propagation
 router.delete('/:id', authenticate, requireRole('super_admin', 'admin', 'examiner'), async (req, res) => {
   try {
     await pool.query(`DELETE FROM exams WHERE id = $1`, [req.params.id]);
+    try {
+      await pool.query(
+        `INSERT INTO sync_tombstones (table_name, record_id) VALUES ('exams', $1)`,
+        [req.params.id]
+      );
+    } catch { /* tombstones table may not exist on older DB */ }
     await logAudit({ userId: req.user.id, userName: req.user.name, role: req.user.role, action: 'Exam Deleted', category: 'exam', details: `Deleted exam ID: ${req.params.id}`, ip: req.ip });
     res.json({ success: true });
   } catch (err) {
