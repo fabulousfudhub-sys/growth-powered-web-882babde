@@ -212,6 +212,17 @@ export function AdminSidebar({ siteName = "ATAPOLY", logoUrl = "/logo.png" }: Ad
       </SidebarContent>
 
       <SidebarFooter className="p-3 border-t border-sidebar-border">
+        {syncStatus && (
+          <div className={`mb-2 flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11px] ${syncStatus.isOnline ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+            {syncStatus.isOnline ? <Wifi className="h-3.5 w-3.5 shrink-0" /> : <WifiOff className="h-3.5 w-3.5 shrink-0" />}
+            {!collapsed && (
+              <span className="truncate">
+                {syncStatus.isSyncing ? 'Syncing…' : syncStatus.isOnline ? 'Online' : 'Offline'}
+                {syncStatus.totalPending > 0 && ` · ${syncStatus.totalPending} pending`}
+              </span>
+            )}
+          </div>
+        )}
         {!collapsed && (
           <div className="mb-2 px-2 py-2 rounded-lg bg-sidebar-accent/30">
             <p className="text-xs font-medium text-sidebar-foreground truncate">{user.name}</p>
