@@ -12,6 +12,8 @@ const MIGRATIONS = [
   `ALTER TABLE courses ADD COLUMN IF NOT EXISTS ca_weight NUMERIC(5,2) DEFAULT 30`,
   `ALTER TABLE courses ADD COLUMN IF NOT EXISTS exam_weight NUMERIC(5,2) DEFAULT 70`,
   `ALTER TABLE courses ADD COLUMN IF NOT EXISTS max_cas INTEGER DEFAULT 1`,
+  // exam_questions sync flag (composite PK table — no id/updated_at)
+  `ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS synced BOOLEAN DEFAULT FALSE`,
 ];
 
 async function runMigrations() {
