@@ -103,6 +103,23 @@ async function getLastSuccessfulSync(client, tableName, operation) {
 
 // ── Push candidate selectors ──
 async function getPushCandidates(client, tableName, limit) {
+  // exam_questions: composite PK, no updated_at — order by exam_id
+  if (tableName === 'exam_questions') {
+    try {
+      const { rows } = await client.query(
+        `SELECT * FROM exam_questions
+         WHERE synced IS NOT TRUE
+         ORDER BY exam_id ASC
+         LIMIT $1`,
+        [limit],
+      );
+      return rows;
+    } catch (err) {
+      console.error('[SYNC] exam_questions push selector error:', err.message);
+      return [];
+    }
+  }
+
   if (hasSyncedFlag(tableName)) {
     const tsCol = getTsColumn(tableName);
     try {
@@ -118,8 +135,6 @@ async function getPushCandidates(client, tableName, limit) {
       return [];
     }
   }
-
-
 
   if (tableName === 'exam_pins') {
     const { rows } = await client.query(
@@ -156,11 +171,28 @@ async function getPushCandidates(client, tableName, limit) {
 }
 
 async function markAsSynced(client, tableName, ids) {
+  // exam_questions uses composite PK — handled by markExamQuestionsSynced
+  if (tableName === 'exam_questions') return;
   if (!hasSyncedFlag(tableName) || ids.length === 0) return;
   await client.query(
     `UPDATE ${tableName} SET synced = TRUE WHERE id = ANY($1::uuid[])`,
     [ids],
   );
+}
+
+async function markExamQuestionsSynced(client, records) {
+  if (!records || records.length === 0) return;
+  for (const r of records) {
+    if (!r?.exam_id || !r?.question_id) continue;
+    try {
+      await client.query(
+        `UPDATE exam_questions SET synced = TRUE WHERE exam_id = $1 AND question_id = $2`,
+        [r.exam_id, r.question_id],
+      );
+    } catch (err) {
+      console.warn('[SYNC] markExamQuestionsSynced failed:', err.message);
+    }
+  }
 }
 
 async function logSyncSuccess(client, tableName, operation, recordIds = []) {
@@ -345,6 +377,7 @@ async function pushOnly() {
           await pushToOnlineServer(tableName, records);
           const ids = records.map((r) => r.id).filter(Boolean);
           await markAsSynced(client, tableName, ids.filter(isUuid));
+          if (tableName === 'exam_questions') await markExamQuestionsSynced(client, records);
 
           results.pushed += records.length;
           results.tables[tableName] = { pushed: records.length };
@@ -447,6 +480,7 @@ async function syncNow() {
           await pushToOnlineServer(tableName, records);
           const ids = records.map((r) => r.id).filter(Boolean);
           await markAsSynced(client, tableName, ids.filter(isUuid));
+          if (tableName === 'exam_questions') await markExamQuestionsSynced(client, records);
 
           results.pushed += records.length;
           results.tables[tableName] = {
