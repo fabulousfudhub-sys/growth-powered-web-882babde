@@ -101,8 +101,14 @@ router.post('/trigger', authenticate, requireRole('super_admin'), async (req, re
   }
 });
 
-// Download a backup file
-router.get('/download/:filename', authenticate, requireRole('super_admin'), (req, res) => {
+// Download a backup file — supports ?token=JWT for browser link clicks
+router.get('/download/:filename', (req, res, next) => {
+  // Allow token via query param (browser <a href> can't set Authorization header)
+  if (!req.headers.authorization && req.query.token) {
+    req.headers.authorization = `Bearer ${req.query.token}`;
+  }
+  return authenticate(req, res, next);
+}, requireRole('super_admin'), (req, res) => {
   const safe = path.basename(req.params.filename);
   const fp = path.join(BACKUP_DIR, safe);
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Backup not found' });

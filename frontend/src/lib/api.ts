@@ -253,6 +253,7 @@ export const api = {
   async loginStudent(
     matricNumber: string,
     examPin: string,
+    deviceFingerprint?: string,
   ): Promise<{
     user: User;
     exam: Exam;
@@ -270,7 +271,10 @@ export const api = {
         resumed?: boolean;
       }>("/api/auth/student/login", {
         method: "POST",
-        body: JSON.stringify({ matricNumber, examPin }),
+        body: JSON.stringify({ matricNumber, examPin, deviceFingerprint }),
+        headers: deviceFingerprint
+          ? { "x-device-fingerprint": deviceFingerprint }
+          : undefined,
       });
       setAuthToken(res.token);
       return {
@@ -859,6 +863,61 @@ export const api = {
     return request("/api/settings/test-sync-connection", {
       method: "POST",
       body: JSON.stringify(config),
+    });
+  },
+
+  // System health
+  async getSystemHealth(): Promise<any> {
+    return request("/api/system-health");
+  },
+
+  // Backups
+  async getBackups(): Promise<
+    Array<{
+      id: string;
+      filename: string;
+      size_bytes: number | null;
+      table_count: number | null;
+      row_count: number | null;
+      status: string;
+      error_message: string | null;
+      triggered_by: string;
+      created_at: string;
+    }>
+  > {
+    return request("/api/backups");
+  },
+  async triggerBackup(): Promise<{ ok: boolean; filename: string; sizeBytes: number; rowCount: number }> {
+    return request("/api/backups/trigger", { method: "POST" });
+  },
+  getBackupDownloadUrl(filename: string): string {
+    const base = getApiBases()[0] || "";
+    const token = getAuthToken();
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
+    return `${base}/api/backups/download/${encodeURIComponent(filename)}${tokenParam}`;
+  },
+
+  // Question version history
+  async getQuestionVersions(questionId: string): Promise<
+    Array<{
+      id: string;
+      version: number;
+      type: string;
+      text: string;
+      options: any;
+      correct_answer: any;
+      difficulty: string;
+      marks: number | null;
+      image_url: string | null;
+      edited_by_name: string | null;
+      created_at: string;
+    }>
+  > {
+    return request(`/api/questions/${questionId}/versions`);
+  },
+  async restoreQuestionVersion(questionId: string, versionId: string): Promise<void> {
+    await request(`/api/questions/${questionId}/versions/${versionId}/restore`, {
+      method: "POST",
     });
   },
 

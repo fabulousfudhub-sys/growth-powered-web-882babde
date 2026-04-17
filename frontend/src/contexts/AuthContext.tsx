@@ -78,7 +78,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       setError(null);
       try {
-        const result = await api.loginStudent(matricNumber, examPin);
+        const { getDeviceFingerprint } = await import("@/lib/fingerprint");
+        const fp = await getDeviceFingerprint().catch(() => undefined);
+        const result = await api.loginStudent(matricNumber, examPin, fp);
         if (result) {
           setUser(result.user);
           setActiveExam(result.exam);
