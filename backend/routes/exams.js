@@ -204,10 +204,11 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
 
     if (carryoverStudentIds && carryoverStudentIds.length > 0) {
       for (const sid of carryoverStudentIds) {
+        const pin = await generateUniquePin(examId);
         await client.query(
           `INSERT INTO exam_pins (exam_id, student_id, pin) VALUES ($1, $2, $3)
            ON CONFLICT (exam_id, student_id) DO NOTHING`,
-          [examId, sid, String(Math.floor(10000000 + Math.random() * 90000000))]
+          [examId, sid, pin]
         );
       }
     }
@@ -323,7 +324,8 @@ router.post('/:id/generate-pins', authenticate, requireRole('super_admin', 'admi
     const exam = exams[0];
 
     if (mode === 'shared') {
-      const sharedPin = String(Math.floor(10000000 + Math.random() * 90000000));
+      // Crypto-secure 8-digit shared PIN
+      const sharedPin = String(crypto.randomInt(10000000, 100000000));
       await pool.query(
         `UPDATE exams SET pin_mode = 'shared', shared_pin = $1 WHERE id = $2`,
         [sharedPin, examId]
@@ -346,7 +348,7 @@ router.post('/:id/generate-pins', authenticate, requireRole('super_admin', 'admi
 
     const pins = [];
     for (const student of students) {
-      const pin = String(Math.floor(10000000 + Math.random() * 90000000));
+      const pin = await generateUniquePin(examId);
       await pool.query(
         `INSERT INTO exam_pins (exam_id, student_id, pin) VALUES ($1, $2, $3)
          ON CONFLICT (exam_id, student_id) DO UPDATE SET pin = $3, used = FALSE`,
