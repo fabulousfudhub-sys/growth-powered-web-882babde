@@ -79,6 +79,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
     instructions: "",
     examType: "exam" as "exam" | "ca",
     caNumber: "1",
+    semester: "first" as "first" | "second",
+    showResult: true,
   });
 
   useEffect(() => {
@@ -106,8 +108,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
     }
   }, [form.courseId]);
 
-  const update = (key: string, val: string) =>
-    setForm((prev) => ({ ...prev, [key]: val }));
+  const update = (key: string, val: string | boolean) =>
+    setForm((prev) => ({ ...prev, [key]: val as never }));
 
   const filteredCourses = form.departmentId
     ? courses.filter(
@@ -211,6 +213,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
         carryoverStudentIds: carryoverStudents.map((s) => s.id),
         examType: form.examType,
         caNumber: form.examType === "ca" ? parseInt(form.caNumber) : undefined,
+        semester: form.semester,
+        showResult: form.showResult,
       });
       setQuestionsAssigned(result.questionsAssigned || 0);
 
@@ -260,6 +264,8 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
       instructions: "",
       examType: "exam",
       caNumber: "1",
+      semester: "first",
+      showResult: true,
     });
   };
 
