@@ -604,6 +604,14 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
                 {allocationError && <p className="text-xs text-destructive font-medium">⚠ {allocationError}</p>}
               </div>
             )}
+
+            <div className="p-3 rounded-lg bg-muted text-sm">
+              <p className="text-muted-foreground">
+                Each question will carry{" "}
+                <strong className="text-foreground">
+                  {marksPerQuestion} marks
+                </strong>
+              </p>
                 <strong className="text-foreground">
                   {marksPerQuestion} marks
                 </strong>
