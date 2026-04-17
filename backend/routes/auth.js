@@ -330,6 +330,15 @@ router.post('/student/login', async (req, res) => {
       );
       if (pins.length === 0) return res.status(401).json({ error: 'Invalid or used exam PIN' });
       pin = pins[0];
+
+      // Reject if already submitted/graded
+      const { rows: priorAttempts } = await pool.query(
+        `SELECT id, status FROM exam_attempts WHERE exam_id = $1 AND student_id = $2`,
+        [pin.exam_id, student.id]
+      );
+      if (priorAttempts.length > 0 && priorAttempts[0].status !== 'in_progress') {
+        return res.status(401).json({ error: 'You have already taken this exam' });
+      }
     }
 
     // Mark individual PIN as used
@@ -338,13 +347,26 @@ router.post('/student/login', async (req, res) => {
     }
     await pool.query(`UPDATE users SET last_login = NOW() WHERE id = $1`, [student.id]);
 
-    // Create attempt with started_at = NULL (timer starts when student clicks Begin)
+    // Single-device fingerprint lock (sent by client)
+    const fingerprint = (req.body.deviceFingerprint || req.headers['x-device-fingerprint'] || '').toString().slice(0, 128) || null;
+
+    // Create attempt — only allow status reset if previous was in_progress (never reset graded attempts).
     const { rows: attempts } = await pool.query(
-      `INSERT INTO exam_attempts (exam_id, student_id, started_at) VALUES ($1, $2, NULL)
-       ON CONFLICT (exam_id, student_id) DO UPDATE SET status = 'in_progress'
-       RETURNING id, started_at`,
-      [pin.exam_id, student.id]
+      `INSERT INTO exam_attempts (exam_id, student_id, started_at, device_fingerprint, device_locked_at)
+       VALUES ($1, $2, NULL, $3, CASE WHEN $3 IS NULL THEN NULL ELSE NOW() END)
+       ON CONFLICT (exam_id, student_id) DO UPDATE
+         SET device_fingerprint = COALESCE(exam_attempts.device_fingerprint, EXCLUDED.device_fingerprint),
+             device_locked_at = COALESCE(exam_attempts.device_locked_at, EXCLUDED.device_locked_at)
+       WHERE exam_attempts.status = 'in_progress'
+       RETURNING id, started_at, device_fingerprint`,
+      [pin.exam_id, student.id, fingerprint]
     );
+    if (attempts.length === 0) {
+      return res.status(401).json({ error: 'You have already taken this exam' });
+    }
+    if (fingerprint && attempts[0].device_fingerprint && attempts[0].device_fingerprint !== fingerprint) {
+      return res.status(403).json({ error: 'This exam is locked to another device. Contact your invigilator.' });
+    }
 
     await logAudit({ userId: student.id, userName: student.name, role: 'student', action: 'Exam Login', category: 'exam', details: `${student.name} logged in for exam: ${pin.title}`, ip: req.ip });
 
