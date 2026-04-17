@@ -1,6 +1,8 @@
 const { Router } = require('express');
 const { pool, getDbInfo } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { resetSystemLockCache } = require('../middleware/systemLock');
+const { invalidateSyncConfigCache } = require('../services/sync');
 
 const router = Router();
 
@@ -27,6 +29,8 @@ router.put('/', authenticate, requireRole('super_admin'), async (req, res) => {
        ON CONFLICT (id) DO UPDATE SET settings = $1, updated_at = NOW()`,
       [JSON.stringify(settings)]
     );
+    try { resetSystemLockCache(); } catch { /* ignore */ }
+    try { invalidateSyncConfigCache(); } catch { /* ignore */ }
     res.json({ success: true });
   } catch (err) {
     console.error('Save settings error:', err);

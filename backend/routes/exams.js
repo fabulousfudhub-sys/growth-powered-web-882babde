@@ -1,11 +1,29 @@
 const { Router } = require('express');
+const crypto = require('crypto');
 const { pool } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { v4: uuid } = require('uuid');
 const { logAudit } = require('../services/audit');
 const { autoSubmitAttempt } = require('./auth');
+const { enforceSystemLock } = require('../middleware/systemLock');
 
 const router = Router();
+// All exam routes require auth + system lock check (after auth)
+router.use(authenticate, enforceSystemLock);
+
+// Crypto-secure 8-digit PIN generator with collision retry
+async function generateUniquePin(examId, maxAttempts = 10) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const n = crypto.randomInt(10000000, 100000000); // 8 digits
+    const pin = String(n);
+    const { rows } = await pool.query(
+      `SELECT 1 FROM exam_pins WHERE exam_id = $1 AND pin = $2 LIMIT 1`,
+      [examId, pin]
+    );
+    if (rows.length === 0) return pin;
+  }
+  throw new Error('Failed to generate unique PIN after retries');
+}
 
 // List exams
 router.get('/', authenticate, async (req, res) => {
@@ -115,9 +133,12 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
     const finalShowResult = showResult !== false;
     const finalTotalMarks = parseFloat(totalMarks) || 0;
 
-    // ── Mark allocation guard: CA1 + CA2 + Exam must not exceed 100; weights enforced ──
+    // ── Mark allocation guard: CA1 + CA2 + Exam must not exceed 100; weights enforced.
+    //    Includes ALL exams (incl. completed) so admins cannot bypass by stopping prior exams.
     const allocParams = [courseId];
-    let allocWhere = `course_id = $1 AND status != 'completed'`;
+    let allocWhere = `course_id = $1`;
+    if (level) { allocParams.push(level); allocWhere += ` AND level = $${allocParams.length}`; }
+    if (finalSemester) { allocParams.push(finalSemester); allocWhere += ` AND semester = $${allocParams.length}`; }
     if (level) { allocParams.push(level); allocWhere += ` AND level = $${allocParams.length}`; }
     if (finalSemester) { allocParams.push(finalSemester); allocWhere += ` AND semester = $${allocParams.length}`; }
 
@@ -183,10 +204,11 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
 
     if (carryoverStudentIds && carryoverStudentIds.length > 0) {
       for (const sid of carryoverStudentIds) {
+        const pin = await generateUniquePin(examId);
         await client.query(
           `INSERT INTO exam_pins (exam_id, student_id, pin) VALUES ($1, $2, $3)
            ON CONFLICT (exam_id, student_id) DO NOTHING`,
-          [examId, sid, String(Math.floor(10000000 + Math.random() * 90000000))]
+          [examId, sid, pin]
         );
       }
     }
@@ -243,10 +265,16 @@ router.put('/:id', authenticate, requireRole('super_admin', 'admin', 'examiner')
   }
 });
 
-// Delete exam
+// Delete exam — also writes a tombstone for sync delete-propagation
 router.delete('/:id', authenticate, requireRole('super_admin', 'admin', 'examiner'), async (req, res) => {
   try {
     await pool.query(`DELETE FROM exams WHERE id = $1`, [req.params.id]);
+    try {
+      await pool.query(
+        `INSERT INTO sync_tombstones (table_name, record_id) VALUES ('exams', $1)`,
+        [req.params.id]
+      );
+    } catch { /* tombstones table may not exist on older DB */ }
     await logAudit({ userId: req.user.id, userName: req.user.name, role: req.user.role, action: 'Exam Deleted', category: 'exam', details: `Deleted exam ID: ${req.params.id}`, ip: req.ip });
     res.json({ success: true });
   } catch (err) {
@@ -302,7 +330,8 @@ router.post('/:id/generate-pins', authenticate, requireRole('super_admin', 'admi
     const exam = exams[0];
 
     if (mode === 'shared') {
-      const sharedPin = String(Math.floor(10000000 + Math.random() * 90000000));
+      // Crypto-secure 8-digit shared PIN
+      const sharedPin = String(crypto.randomInt(10000000, 100000000));
       await pool.query(
         `UPDATE exams SET pin_mode = 'shared', shared_pin = $1 WHERE id = $2`,
         [sharedPin, examId]
@@ -325,7 +354,7 @@ router.post('/:id/generate-pins', authenticate, requireRole('super_admin', 'admi
 
     const pins = [];
     for (const student of students) {
-      const pin = String(Math.floor(10000000 + Math.random() * 90000000));
+      const pin = await generateUniquePin(examId);
       await pool.query(
         `INSERT INTO exam_pins (exam_id, student_id, pin) VALUES ($1, $2, $3)
          ON CONFLICT (exam_id, student_id) DO UPDATE SET pin = $3, used = FALSE`,

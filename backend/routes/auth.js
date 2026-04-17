@@ -7,6 +7,7 @@ const { logAudit } = require('../services/audit');
 const router = Router();
 
 // Auto-submit helper (shared)
+// Uses per-question marks from `questions.marks`. Falls back to even split when marks not set.
 async function autoSubmitAttempt(attemptId, client) {
   const conn = client || await pool.connect();
   const shouldRelease = !client;
@@ -21,33 +22,70 @@ async function autoSubmitAttempt(attemptId, client) {
     const attempt = attempts[0];
 
     const { rows: studentAnswers } = await conn.query(
-      `SELECT a.question_id, a.answer, q.correct_answer, q.type
+      `SELECT a.id as answer_id, a.question_id, a.answer, q.correct_answer, q.type,
+              COALESCE(q.marks, 0) AS marks
        FROM answers a JOIN questions q ON a.question_id = q.id WHERE a.attempt_id = $1`,
       [attemptId]
     );
 
-    let correct = 0;
-    const marksPerQ = parseFloat(attempt.total_marks) / attempt.questions_to_answer;
+    const totalMarks = parseFloat(attempt.total_marks) || 0;
+    const hasPerQMarks = studentAnswers.some(sa => parseFloat(sa.marks) > 0);
+    const evenSplit = attempt.questions_to_answer > 0 ? totalMarks / attempt.questions_to_answer : 0;
+
+    let earned = 0;
+    let pendingManual = 0;
+    const requiresGradingIds = [];
+
     for (const sa of studentAnswers) {
-      if (sa.type === 'essay' || sa.type === 'short_answer') continue;
+      const qMarks = hasPerQMarks ? (parseFloat(sa.marks) || 0) : evenSplit;
+
+      if (sa.type === 'essay' || sa.type === 'short_answer') {
+        pendingManual += qMarks;
+        requiresGradingIds.push(sa.answer_id);
+        continue;
+      }
+
       const correctAns = sa.correct_answer;
-      if (typeof correctAns === 'string' && sa.answer?.toLowerCase() === correctAns.toLowerCase()) correct++;
-      else if (Array.isArray(correctAns) && correctAns.map(a => a.toLowerCase()).includes(sa.answer?.toLowerCase())) correct++;
+      const studentAns = (sa.answer || '').toLowerCase().trim();
+      let isCorrect = false;
+      if (typeof correctAns === 'string' && studentAns === correctAns.toLowerCase().trim()) {
+        isCorrect = true;
+      } else if (Array.isArray(correctAns)) {
+        const acceptable = correctAns.map(a => String(a).toLowerCase().trim());
+        if (acceptable.includes(studentAns)) isCorrect = true;
+      }
+      if (isCorrect) earned += qMarks;
     }
-    const score = correct * marksPerQ;
+
+    if (requiresGradingIds.length > 0) {
+      try {
+        await conn.query(
+          `UPDATE answers SET requires_grading = TRUE WHERE id = ANY($1::uuid[])`,
+          [requiresGradingIds],
+        );
+      } catch { /* column may be missing on older DBs */ }
+    }
 
     await conn.query(
       `UPDATE exam_attempts SET submitted_at = NOW(), score = $1, total_marks = $2, status = 'submitted' WHERE id = $3`,
-      [score, attempt.total_marks, attemptId]
+      [earned, totalMarks, attemptId]
     );
     if (!client) await conn.query('COMMIT');
-    return { score: Math.round(score * 100) / 100, total: parseFloat(attempt.total_marks) };
+    return {
+      score: Math.round(earned * 100) / 100,
+      total: totalMarks,
+      pendingManual: Math.round(pendingManual * 100) / 100,
+    };
   } catch (err) {
-    if (!client) await conn.query('ROLLBACK');
+    if (!client) {
+      try { await conn.query('ROLLBACK'); } catch { /* ignore */ }
+    }
     console.error('Auto-submit error:', err);
     return null;
   } finally {
-    if (shouldRelease) conn.release();
+    if (shouldRelease) {
+      try { conn.release(); } catch { /* ignore */ }
+    }
   }
 }
 
@@ -292,6 +330,15 @@ router.post('/student/login', async (req, res) => {
       );
       if (pins.length === 0) return res.status(401).json({ error: 'Invalid or used exam PIN' });
       pin = pins[0];
+
+      // Reject if already submitted/graded
+      const { rows: priorAttempts } = await pool.query(
+        `SELECT id, status FROM exam_attempts WHERE exam_id = $1 AND student_id = $2`,
+        [pin.exam_id, student.id]
+      );
+      if (priorAttempts.length > 0 && priorAttempts[0].status !== 'in_progress') {
+        return res.status(401).json({ error: 'You have already taken this exam' });
+      }
     }
 
     // Mark individual PIN as used
@@ -300,13 +347,26 @@ router.post('/student/login', async (req, res) => {
     }
     await pool.query(`UPDATE users SET last_login = NOW() WHERE id = $1`, [student.id]);
 
-    // Create attempt with started_at = NULL (timer starts when student clicks Begin)
+    // Single-device fingerprint lock (sent by client)
+    const fingerprint = (req.body.deviceFingerprint || req.headers['x-device-fingerprint'] || '').toString().slice(0, 128) || null;
+
+    // Create attempt — only allow status reset if previous was in_progress (never reset graded attempts).
     const { rows: attempts } = await pool.query(
-      `INSERT INTO exam_attempts (exam_id, student_id, started_at) VALUES ($1, $2, NULL)
-       ON CONFLICT (exam_id, student_id) DO UPDATE SET status = 'in_progress'
-       RETURNING id, started_at`,
-      [pin.exam_id, student.id]
+      `INSERT INTO exam_attempts (exam_id, student_id, started_at, device_fingerprint, device_locked_at)
+       VALUES ($1, $2, NULL, $3, CASE WHEN $3 IS NULL THEN NULL ELSE NOW() END)
+       ON CONFLICT (exam_id, student_id) DO UPDATE
+         SET device_fingerprint = COALESCE(exam_attempts.device_fingerprint, EXCLUDED.device_fingerprint),
+             device_locked_at = COALESCE(exam_attempts.device_locked_at, EXCLUDED.device_locked_at)
+       WHERE exam_attempts.status = 'in_progress'
+       RETURNING id, started_at, device_fingerprint`,
+      [pin.exam_id, student.id, fingerprint]
     );
+    if (attempts.length === 0) {
+      return res.status(401).json({ error: 'You have already taken this exam' });
+    }
+    if (fingerprint && attempts[0].device_fingerprint && attempts[0].device_fingerprint !== fingerprint) {
+      return res.status(403).json({ error: 'This exam is locked to another device. Contact your invigilator.' });
+    }
 
     await logAudit({ userId: student.id, userName: student.name, role: 'student', action: 'Exam Login', category: 'exam', details: `${student.name} logged in for exam: ${pin.title}`, ip: req.ip });
 

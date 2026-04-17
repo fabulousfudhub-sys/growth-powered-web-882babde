@@ -12,16 +12,26 @@ const importRoutes = require('./routes/import');
 const settingsRoutes = require('./routes/settings');
 const uploadRoutes = require('./routes/uploads');
 const licenseRoutes = require('./routes/license');
+const healthRoutes = require('./routes/health');
+const backupRoutes = require('./routes/backups');
+const questionVersionRoutes = require('./routes/questionVersions');
 const { startSyncService } = require('./services/sync');
 const { autoSubmitAttempt } = require('./routes/auth');
 const { enforceSystemLock } = require('./middleware/systemLock');
+const { startAutoBackup } = require('./routes/backups');
 const { getCachedLicense } = require('./license/license');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(express.json({ limit: '10mb' }));
-app.use(cors({ origin: '*' }));
+
+// CORS — restrict origins in production via ALLOWED_ORIGINS env
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim());
+app.use(cors({
+  origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+  credentials: true,
+}));
 
 // Request logging
 app.use((req, _res, next) => {
@@ -29,9 +39,8 @@ app.use((req, _res, next) => {
   next();
 });
 
-// System lock enforcement — applied after auth middleware on each route
-// but we apply globally here for mutating requests
-app.use(enforceSystemLock);
+// NOTE: enforceSystemLock is applied per-route AFTER `authenticate`
+// (mounted inside individual route files) so that login endpoints stay reachable.
 
 // Health check
 app.get('/api/health', async (_req, res) => {
@@ -54,6 +63,9 @@ app.use('/api/import', importRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/license', licenseRoutes);
+app.use('/api/system-health', healthRoutes);
+app.use('/api/backups', backupRoutes);
+app.use('/api/questions', questionVersionRoutes);
 
 // Serve frontend build
 app.use(express.static(path.join(__dirname, 'public')));
