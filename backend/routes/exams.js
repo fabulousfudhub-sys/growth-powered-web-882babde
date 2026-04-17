@@ -8,7 +8,8 @@ const { autoSubmitAttempt } = require('./auth');
 const { enforceSystemLock } = require('../middleware/systemLock');
 
 const router = Router();
-router.use(authenticate, enforceSystemLock);
+// Apply systemLock after each route's `authenticate` runs.
+router.use(enforceSystemLock);
 
 // Crypto-secure 8-digit PIN generator with collision retry
 async function generateUniquePin(examId, maxAttempts = 10) {
