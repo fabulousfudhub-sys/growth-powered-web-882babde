@@ -88,6 +88,8 @@ export interface Exam {
   pins?: ExamPin[];
   examType?: "exam" | "ca";
   caNumber?: number;
+  semester?: string | null;
+  showResult?: boolean;
 }
 
 export interface ExamAttempt {
