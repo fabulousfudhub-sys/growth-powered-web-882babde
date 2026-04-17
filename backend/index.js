@@ -21,7 +21,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(express.json({ limit: '10mb' }));
-app.use(cors({ origin: '*' }));
+
+// CORS — restrict origins in production via ALLOWED_ORIGINS env
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim());
+app.use(cors({
+  origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+  credentials: true,
+}));
 
 // Request logging
 app.use((req, _res, next) => {
@@ -29,9 +35,8 @@ app.use((req, _res, next) => {
   next();
 });
 
-// System lock enforcement — applied after auth middleware on each route
-// but we apply globally here for mutating requests
-app.use(enforceSystemLock);
+// NOTE: enforceSystemLock is applied per-route AFTER `authenticate`
+// (mounted inside individual route files) so that login endpoints stay reachable.
 
 // Health check
 app.get('/api/health', async (_req, res) => {
