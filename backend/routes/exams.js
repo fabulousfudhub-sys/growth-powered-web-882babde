@@ -112,7 +112,49 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
     const finalExamType = examType || 'exam';
     const finalCaNumber = caNumber || 1;
     const finalSemester = semester || null;
-    const finalShowResult = showResult !== false; // default true
+    const finalShowResult = showResult !== false;
+    const finalTotalMarks = parseFloat(totalMarks) || 0;
+
+    // ── Mark allocation guard: CA1 + CA2 + Exam must not exceed 100; weights enforced ──
+    const allocParams = [courseId];
+    let allocWhere = `course_id = $1 AND status != 'completed'`;
+    if (level) { allocParams.push(level); allocWhere += ` AND level = $${allocParams.length}`; }
+    if (finalSemester) { allocParams.push(finalSemester); allocWhere += ` AND semester = $${allocParams.length}`; }
+
+    const { rows: existing } = await client.query(
+      `SELECT id, exam_type, ca_number, total_marks FROM exams WHERE ${allocWhere}`,
+      allocParams,
+    );
+    const { rows: courseFull } = await client.query(
+      `SELECT ca_weight, exam_weight FROM courses WHERE id = $1`, [courseId],
+    );
+    const caWeight = parseFloat(courseFull[0]?.ca_weight) || 30;
+    const examWeight = parseFloat(courseFull[0]?.exam_weight) || 70;
+    let exCa1 = 0, exCa2 = 0, exExam = 0;
+    for (const r of existing) {
+      const m = parseFloat(r.total_marks) || 0;
+      if (r.exam_type === 'ca' && Number(r.ca_number) === 1) exCa1 += m;
+      else if (r.exam_type === 'ca' && Number(r.ca_number) === 2) exCa2 += m;
+      else if (r.exam_type === 'exam') exExam += m;
+    }
+    let projCa1 = exCa1, projCa2 = exCa2, projExam = exExam;
+    if (finalExamType === 'ca' && Number(finalCaNumber) === 1) projCa1 += finalTotalMarks;
+    else if (finalExamType === 'ca' && Number(finalCaNumber) === 2) projCa2 += finalTotalMarks;
+    else if (finalExamType === 'exam') projExam += finalTotalMarks;
+
+    if (projCa1 + projCa2 > caWeight) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `CA1 + CA2 (${projCa1 + projCa2}) cannot exceed CA weight of ${caWeight}%` });
+    }
+    if (projExam > examWeight) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Exam total (${projExam}) cannot exceed Exam weight of ${examWeight}%` });
+    }
+    if (projCa1 + projCa2 + projExam > 100) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `CA1 + CA2 + Exam total (${projCa1 + projCa2 + projExam}) cannot exceed 100` });
+    }
+
     const { rows } = await client.query(
       `INSERT INTO exams (title, course_id, department_id, school_id, programme, level,
        duration, total_questions, questions_to_answer, total_marks, start_date, end_date,
@@ -120,7 +162,7 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [title, courseId, departmentId, finalSchoolId, programme || null, level || null,
        duration || 45, totalQuestions || 20, questionsToAnswer || 20,
-       totalMarks || 40, startDate || null, endDate || null, instructions || null,
+       finalTotalMarks || 40, startDate || null, endDate || null, instructions || null,
        pinMode, finalExamType, finalCaNumber, finalSemester, finalShowResult, req.user.id]
     );
     const examId = rows[0].id;
