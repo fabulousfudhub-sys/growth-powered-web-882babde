@@ -1,11 +1,28 @@
 const { Router } = require('express');
+const crypto = require('crypto');
 const { pool } = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { v4: uuid } = require('uuid');
 const { logAudit } = require('../services/audit');
 const { autoSubmitAttempt } = require('./auth');
+const { enforceSystemLock } = require('../middleware/systemLock');
 
 const router = Router();
+router.use(authenticate, enforceSystemLock);
+
+// Crypto-secure 8-digit PIN generator with collision retry
+async function generateUniquePin(examId, maxAttempts = 10) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const n = crypto.randomInt(10000000, 100000000); // 8 digits
+    const pin = String(n);
+    const { rows } = await pool.query(
+      `SELECT 1 FROM exam_pins WHERE exam_id = $1 AND pin = $2 LIMIT 1`,
+      [examId, pin]
+    );
+    if (rows.length === 0) return pin;
+  }
+  throw new Error('Failed to generate unique PIN after retries');
+}
 
 // List exams
 router.get('/', authenticate, async (req, res) => {
