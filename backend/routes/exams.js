@@ -39,6 +39,8 @@ router.get('/', authenticate, async (req, res) => {
       instructions: r.instructions, enrolledStudents: parseInt(r.enrolled_students),
       createdBy: r.created_by, pinMode: r.pin_mode, sharedPin: r.shared_pin,
       examType: r.exam_type || 'exam', caNumber: r.ca_number || 1,
+      semester: r.semester || null,
+      showResult: r.show_result !== false,
     })));
   } catch (err) {
     console.error('Get exams error:', err);
@@ -76,6 +78,8 @@ router.get('/:id', authenticate, async (req, res) => {
       instructions: r.instructions, enrolledStudents,
       createdBy: r.created_by, pinMode: r.pin_mode, sharedPin: r.shared_pin,
       examType: r.exam_type || 'exam', caNumber: r.ca_number || 1,
+      semester: r.semester || null,
+      showResult: r.show_result !== false,
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch exam' });
@@ -87,7 +91,7 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
   const {
     title, courseId, departmentId, programme, level, duration,
     totalQuestions, questionsToAnswer, totalMarks, startDate, endDate, instructions,
-    carryoverStudentIds, examType, caNumber
+    carryoverStudentIds, examType, caNumber, semester, showResult,
   } = req.body;
 
   if (!title || !courseId || !departmentId) {
@@ -107,15 +111,17 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
     const pinMode = req.body.pinMode || 'individual';
     const finalExamType = examType || 'exam';
     const finalCaNumber = caNumber || 1;
+    const finalSemester = semester || null;
+    const finalShowResult = showResult !== false; // default true
     const { rows } = await client.query(
       `INSERT INTO exams (title, course_id, department_id, school_id, programme, level,
        duration, total_questions, questions_to_answer, total_marks, start_date, end_date,
-       instructions, pin_mode, exam_type, ca_number, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+       instructions, pin_mode, exam_type, ca_number, semester, show_result, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [title, courseId, departmentId, finalSchoolId, programme || null, level || null,
        duration || 45, totalQuestions || 20, questionsToAnswer || 20,
        totalMarks || 40, startDate || null, endDate || null, instructions || null,
-       pinMode, finalExamType, finalCaNumber, req.user.id]
+       pinMode, finalExamType, finalCaNumber, finalSemester, finalShowResult, req.user.id]
     );
     const examId = rows[0].id;
 
@@ -149,7 +155,7 @@ router.post('/', authenticate, requireRole('super_admin', 'admin', 'examiner'), 
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Create exam error:', err);
-    res.status(500).json({ error: 'Failed to create exam' });
+    res.status(500).json({ error: 'Failed to create exam. Please verify the course, department, and exam configuration.' });
   } finally {
     client.release();
   }
