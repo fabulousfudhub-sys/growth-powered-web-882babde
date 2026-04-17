@@ -458,4 +458,52 @@ router.post('/:id/carryover-students', authenticate, requireRole('super_admin', 
   }
 });
 
+// Get existing mark allocation for a course/level/semester (CA1, CA2, Exam)
+// Used by CreateExam dialog to ensure CA1+CA2+Exam total <= 100 and respects course weights
+router.get('/allocation/summary', authenticate, async (req, res) => {
+  try {
+    const { courseId, level, semester, excludeExamId } = req.query;
+    if (!courseId) return res.status(400).json({ error: 'courseId is required' });
+
+    const params = [courseId];
+    let where = `course_id = $1 AND status != 'completed'`;
+    if (level) { params.push(level); where += ` AND level = $${params.length}`; }
+    if (semester) { params.push(semester); where += ` AND semester = $${params.length}`; }
+    if (excludeExamId) { params.push(excludeExamId); where += ` AND id != $${params.length}`; }
+
+    const { rows: existing } = await pool.query(
+      `SELECT id, exam_type, ca_number, total_marks
+       FROM exams WHERE ${where}`,
+      params,
+    );
+
+    const { rows: courseRows } = await pool.query(
+      `SELECT ca_weight, exam_weight, max_cas FROM courses WHERE id = $1`,
+      [courseId],
+    );
+    const course = courseRows[0] || { ca_weight: 30, exam_weight: 70, max_cas: 2 };
+
+    let ca1 = 0, ca2 = 0, examMarks = 0;
+    let ca1ExamId = null, ca2ExamId = null, examExamId = null;
+    for (const r of existing) {
+      const m = parseFloat(r.total_marks) || 0;
+      if (r.exam_type === 'ca' && Number(r.ca_number) === 1) { ca1 += m; ca1ExamId = r.id; }
+      else if (r.exam_type === 'ca' && Number(r.ca_number) === 2) { ca2 += m; ca2ExamId = r.id; }
+      else if (r.exam_type === 'exam') { examMarks += m; examExamId = r.id; }
+    }
+
+    res.json({
+      caWeight: parseFloat(course.ca_weight) || 30,
+      examWeight: parseFloat(course.exam_weight) || 70,
+      maxCas: parseInt(course.max_cas) || 2,
+      existing: { ca1, ca2, exam: examMarks },
+      existingIds: { ca1: ca1ExamId, ca2: ca2ExamId, exam: examExamId },
+      total: ca1 + ca2 + examMarks,
+    });
+  } catch (err) {
+    console.error('Allocation summary error:', err);
+    res.status(500).json({ error: 'Failed to fetch allocation summary' });
+  }
+});
+
 module.exports = router;
