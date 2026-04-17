@@ -144,6 +144,19 @@ export function AdminSidebar({ siteName = "ATAPOLY", logoUrl = "/logo.png" }: Ad
   const { user, logout } = useAuth();
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const [syncStatus, setSyncStatus] = useState<{ isOnline: boolean; isSyncing: boolean; totalPending: number } | null>(null);
+
+  useEffect(() => {
+    if (!user || user.role === "student") return;
+    const fetchStatus = () => {
+      api.getSyncStatus()
+        .then((s: any) => setSyncStatus({ isOnline: !!s.isOnline, isSyncing: !!s.isSyncing, totalPending: s.totalPending || 0 }))
+        .catch(() => {});
+    };
+    fetchStatus();
+    const t = setInterval(fetchStatus, 30000);
+    return () => clearInterval(t);
+  }, [user]);
 
   if (!user || user.role === "student") return null;
 
