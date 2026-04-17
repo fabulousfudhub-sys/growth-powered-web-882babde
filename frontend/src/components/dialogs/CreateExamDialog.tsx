@@ -165,16 +165,35 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
   // Validation: questionsToAnswer < totalQuestions (in bank) <= courseQuestionCount
   const totalQNum = parseInt(form.totalQuestions) || 0;
   const toAnswerNum = parseInt(form.questionsToAnswer) || 0;
+  const totalMarksNum = parseFloat(form.totalMarks) || 0;
   const bankValid =
     courseQuestionCount === null || totalQNum <= courseQuestionCount;
   const answerValid = toAnswerNum > 0 && toAnswerNum <= totalQNum;
+
+  // Mark allocation validation (CA1+CA2+Exam ≤ 100, CAs ≤ caWeight, Exam ≤ examWeight)
+  let allocationError = "";
+  if (allocation) {
+    const projCa1 = allocation.existing.ca1 + (form.examType === "ca" && form.caNumber === "1" ? totalMarksNum : 0);
+    const projCa2 = allocation.existing.ca2 + (form.examType === "ca" && form.caNumber === "2" ? totalMarksNum : 0);
+    const projExam = allocation.existing.exam + (form.examType === "exam" ? totalMarksNum : 0);
+    if (projCa1 + projCa2 > allocation.caWeight) {
+      allocationError = `CA1 + CA2 (${projCa1 + projCa2}) cannot exceed CA weight of ${allocation.caWeight}%`;
+    } else if (projExam > allocation.examWeight) {
+      allocationError = `Exam total (${projExam}) cannot exceed Exam weight of ${allocation.examWeight}%`;
+    } else if (projCa1 + projCa2 + projExam > 100) {
+      allocationError = `CA1 + CA2 + Exam total (${projCa1 + projCa2 + projExam}) cannot exceed 100`;
+    }
+  }
+  const allocationValid = !allocationError;
+
   const canProceedStep2 =
     form.duration &&
     form.totalQuestions &&
     form.questionsToAnswer &&
     form.totalMarks &&
     bankValid &&
-    answerValid;
+    answerValid &&
+    allocationValid;
 
   const searchCarryover = async (q: string) => {
     setCarryoverSearch(q);
