@@ -1098,8 +1098,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // PUBLIC routes (no auth)
     if (method === "POST" && path === "/api/auth/staff/login") return await handleStaffLogin(body);
     if (method === "POST" && path === "/api/auth/student/login") return await handleStudentLogin(body);
-    if (method === "GET" && path === "/api/settings") return await handleSettings("GET", path, body);
-    if (method === "GET" && path === "/api/settings/system-status") return await handleSettings("GET", path, body);
+    if (method === "GET" && path === "/api/settings") {
+      const r = await handleSettings("GET", path, body);
+      return r ?? json({ error: "Not found" }, 404);
+    }
+    if (method === "GET" && path === "/api/settings/system-status") {
+      const r = await handleSettings("GET", path, body);
+      return r ?? json({ error: "Not found" }, 404);
+    }
 
     // AUTH required
     const auth = req.headers.get("Authorization");
