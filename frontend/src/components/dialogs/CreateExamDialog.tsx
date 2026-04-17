@@ -283,6 +283,7 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
     setEnableCarryover(false);
     setCarryoverStudents([]);
     setCourseQuestionCount(null);
+    setAllocation(null);
     setForm({
       title: "",
       courseId: "",
