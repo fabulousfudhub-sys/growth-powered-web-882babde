@@ -377,6 +377,7 @@ async function pushOnly() {
           await pushToOnlineServer(tableName, records);
           const ids = records.map((r) => r.id).filter(Boolean);
           await markAsSynced(client, tableName, ids.filter(isUuid));
+          if (tableName === 'exam_questions') await markExamQuestionsSynced(client, records);
 
           results.pushed += records.length;
           results.tables[tableName] = { pushed: records.length };
