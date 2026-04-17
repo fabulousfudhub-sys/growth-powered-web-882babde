@@ -612,10 +612,6 @@ export default function CreateExamDialog({ open, onOpenChange }: Props) {
                   {marksPerQuestion} marks
                 </strong>
               </p>
-                <strong className="text-foreground">
-                  {marksPerQuestion} marks
-                </strong>
-              </p>
               {totalQNum > toAnswerNum && answerValid && (
                 <p className="text-muted-foreground mt-1">
                   Each student gets a random set of{" "}
