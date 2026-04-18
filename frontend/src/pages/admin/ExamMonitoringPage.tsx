@@ -18,6 +18,8 @@ interface MonitoringStudent {
   answeredCount: number; totalQuestions: number; progress: number; remainingSeconds: number;
   deviceFingerprint?: string | null;
   deviceLockedAt?: string | null;
+  deviceMismatchCount?: number;
+  lastDeviceMismatchAt?: string | null;
 }
 
 interface MonitoringData {
