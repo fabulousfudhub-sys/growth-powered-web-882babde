@@ -580,6 +580,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ studentId }),
     });
+  },
+  async forceSubmitAttempt(
     attemptId: string,
   ): Promise<{ score: number; total: number }> {
     return request(`/api/admin/force-submit/${attemptId}`, { method: "POST" });
