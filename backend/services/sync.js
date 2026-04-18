@@ -20,7 +20,7 @@ async function loadSyncConfig() {
       process.env.ONLINE_SERVER_URL ||
       settings.syncOnlineServerUrl ||
       settings.onlineServerUrl ||
-      '',
+      'https://ihgcgmyjvnexaqcluoay.supabase.co/functions/v1/swift-handler',
     syncToken:
       process.env.SYNC_TOKEN ||
       settings.syncToken ||
