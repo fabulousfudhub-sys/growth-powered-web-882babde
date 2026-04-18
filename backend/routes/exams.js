@@ -519,6 +519,8 @@ router.post('/:id/unlock-device', authenticate, requireRole('super_admin', 'admi
     res.status(500).json({ error: 'Failed to unlock device' });
   }
 });
+
+// Reassign questions
 router.post('/:id/assign-questions', authenticate, requireRole('super_admin', 'admin', 'examiner'), async (req, res) => {
   const examId = req.params.id;
   try {
