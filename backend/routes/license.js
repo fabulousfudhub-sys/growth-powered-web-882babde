@@ -1,58 +1,88 @@
 const { Router } = require('express');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { getCachedLicense, cacheLicense } = require('../license/license');
-const fs = require('fs');
-const path = require('path');
+const {
+  getCachedLicense,
+  getLicenseStatus,
+  cacheLicense,
+  clearLicense,
+  remoteValidate,
+} = require('../license/license');
 
 const router = Router();
 
-const CACHE_PATH = path.join(__dirname, '..', 'license', 'cache.json');
-
-// Get license status (super_admin only)
-router.get('/status', authenticate, requireRole('super_admin'), async (_req, res) => {
-  try {
-    const key = getCachedLicense();
-    let expiresAt = null;
-
-    if (fs.existsSync(CACHE_PATH)) {
-      const data = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'));
-      expiresAt = data.expiresAt;
-    }
-
-    res.json({
-      active: !!key,
-      licenseKey: key ? `${key.slice(0, 4)}****${key.slice(-4)}` : null,
-      expiresAt,
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to check license status' });
-  }
+// PUBLIC status — used by frontend License Activation page (no auth) so users can see
+// the current license state on a locked system before logging in.
+router.get('/public-status', (_req, res) => {
+  const status = getLicenseStatus();
+  res.json({
+    active: status.active,
+    expired: status.expired,
+    expiresAt: status.expiresAt,
+    licenseKey: status.licenseKey
+      ? `${status.licenseKey.slice(0, 4)}****${status.licenseKey.slice(-4)}`
+      : null,
+  });
 });
 
-// Activate license (super_admin only)
-router.post('/activate', authenticate, requireRole('super_admin'), async (req, res) => {
+// PUBLIC activation — anyone with a valid license key can unlock the system.
+// Required because before activation there are no users to authenticate as.
+router.post('/public-activate', async (req, res) => {
   try {
-    const { licenseKey } = req.body;
+    const { licenseKey } = req.body || {};
     if (!licenseKey || typeof licenseKey !== 'string' || licenseKey.trim().length < 4) {
       return res.status(400).json({ error: 'Invalid license key' });
     }
+    const key = licenseKey.trim();
 
-    // TODO: Add remote validation against a license server here
-    // For now, accept any key and cache it
-    cacheLicense(licenseKey.trim());
+    // If a remote validator is configured, require it to confirm the key.
+    const validation = await remoteValidate(key);
+    if (validation.reachable && validation.ok && validation.valid === false) {
+      return res.status(400).json({ error: 'License key rejected by license server' });
+    }
 
+    cacheLicense(key, validation.expiresAt ? { expiresAt: validation.expiresAt } : {});
     res.json({ success: true, message: 'License activated successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to activate license' });
   }
 });
 
-// Deactivate license (super_admin only)
-router.post('/deactivate', authenticate, requireRole('super_admin'), async (_req, res) => {
+// AUTHENTICATED status (super_admin only) — same payload as public but kept for
+// the admin License page so existing UI does not break.
+router.get('/status', authenticate, requireRole('super_admin'), (_req, res) => {
+  const status = getLicenseStatus();
+  res.json({
+    active: status.active,
+    licenseKey: status.licenseKey
+      ? `${status.licenseKey.slice(0, 4)}****${status.licenseKey.slice(-4)}`
+      : null,
+    expiresAt: status.expiresAt,
+    expired: status.expired,
+    lastChecked: status.lastChecked,
+  });
+});
+
+router.post('/activate', authenticate, requireRole('super_admin'), async (req, res) => {
   try {
-    if (fs.existsSync(CACHE_PATH)) {
-      fs.unlinkSync(CACHE_PATH);
+    const { licenseKey } = req.body || {};
+    if (!licenseKey || typeof licenseKey !== 'string' || licenseKey.trim().length < 4) {
+      return res.status(400).json({ error: 'Invalid license key' });
     }
+    const key = licenseKey.trim();
+    const validation = await remoteValidate(key);
+    if (validation.reachable && validation.ok && validation.valid === false) {
+      return res.status(400).json({ error: 'License key rejected by license server' });
+    }
+    cacheLicense(key, validation.expiresAt ? { expiresAt: validation.expiresAt } : {});
+    res.json({ success: true, message: 'License activated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to activate license' });
+  }
+});
+
+router.post('/deactivate', authenticate, requireRole('super_admin'), (_req, res) => {
+  try {
+    clearLicense();
     res.json({ success: true, message: 'License deactivated' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to deactivate license' });
