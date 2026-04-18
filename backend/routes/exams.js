@@ -496,7 +496,29 @@ router.post('/:id/reset-attempt', authenticate, requireRole('super_admin', 'admi
   }
 });
 
-// Reassign questions
+// Unlock student device — clears device_fingerprint so they can log in from a new machine
+router.post('/:id/unlock-device', authenticate, requireRole('super_admin', 'admin', 'examiner', 'lab_admin'), async (req, res) => {
+  const { studentId } = req.body;
+  if (!studentId) return res.status(400).json({ error: 'studentId required' });
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE exam_attempts
+       SET device_fingerprint = NULL, device_locked_at = NULL
+       WHERE exam_id = $1 AND student_id = $2`,
+      [req.params.id, studentId]
+    );
+    await logAudit({
+      userId: req.user.id, userName: req.user.name, role: req.user.role,
+      action: 'Device Unlocked', category: 'security',
+      details: `Cleared device fingerprint for student ${studentId} on exam ${req.params.id}`,
+      ip: req.ip,
+    });
+    res.json({ success: true, cleared: rowCount });
+  } catch (err) {
+    console.error('Unlock device error:', err);
+    res.status(500).json({ error: 'Failed to unlock device' });
+  }
+});
 router.post('/:id/assign-questions', authenticate, requireRole('super_admin', 'admin', 'examiner'), async (req, res) => {
   const examId = req.params.id;
   try {
