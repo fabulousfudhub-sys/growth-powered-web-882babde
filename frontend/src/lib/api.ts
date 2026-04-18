@@ -156,6 +156,10 @@ async function requestWithBase<T>(
     const err = await res
       .json()
       .catch(() => ({ error: res.statusText || "Request failed" }));
+    // 402 = License required → notify the app so it can show the activation page.
+    if (res.status === 402 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(LICENSE_REQUIRED_EVENT));
+    }
     throw buildError(err.error || "Request failed", res.status);
   }
 
