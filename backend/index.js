@@ -19,7 +19,8 @@ const { startSyncService } = require('./services/sync');
 const { autoSubmitAttempt } = require('./routes/auth');
 const { enforceSystemLock } = require('./middleware/systemLock');
 const { startAutoBackup } = require('./routes/backups');
-const { getCachedLicense } = require('./license/license');
+const { getCachedLicense, startPeriodicCheck } = require('./license/license');
+const { enforceLicense } = require('./middleware/licenseGuard');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
