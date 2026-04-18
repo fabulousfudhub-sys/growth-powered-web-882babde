@@ -409,6 +409,16 @@ router.get('/:id/monitoring', authenticate, requireRole('super_admin', 'admin', 
       [req.params.id]
     );
 
+    // Fetch device-mismatch audit events for this exam
+    const { rows: mismatchRows } = await pool.query(
+      `SELECT user_id, COUNT(*)::int as cnt, MAX(created_at) as last_at
+       FROM audit_log
+       WHERE action = 'Device Mismatch' AND details LIKE $1
+       GROUP BY user_id`,
+      [`%examId:${req.params.id}%`]
+    );
+    const mismatchByStudent = new Map(mismatchRows.map(r => [r.user_id, { count: r.cnt, lastAt: r.last_at }]));
+
     const now = new Date();
     const students = attempts.map(a => {
       let remainingSeconds = 0;
@@ -422,6 +432,7 @@ router.get('/:id/monitoring', authenticate, requireRole('super_admin', 'admin', 
       const progress = exam.questions_to_answer > 0
         ? Math.round((parseInt(a.answered_count) / exam.questions_to_answer) * 100) : 0;
 
+      const mm = mismatchByStudent.get(a.student_id);
       return {
         attemptId: a.id, studentId: a.student_id, studentName: a.student_name,
         regNumber: a.reg_number, status: a.status, startedAt: a.started_at,
@@ -430,17 +441,21 @@ router.get('/:id/monitoring', authenticate, requireRole('super_admin', 'admin', 
         progress, remainingSeconds,
         deviceFingerprint: a.device_fingerprint || null,
         deviceLockedAt: a.device_locked_at || null,
+        deviceMismatchCount: mm?.count || 0,
+        lastDeviceMismatchAt: mm?.lastAt || null,
       };
     });
 
     const activeCount = students.filter(s => s.status === 'in_progress').length;
     const submittedCount = students.filter(s => s.status === 'submitted' || s.status === 'graded').length;
+    const totalMismatches = students.reduce((sum, s) => sum + (s.deviceMismatchCount || 0), 0);
 
     res.json({
       examId: exam.id, examTitle: exam.title, course: exam.course_code,
       duration: exam.duration, totalQuestions: exam.questions_to_answer,
       activeStudents: activeCount, submittedStudents: submittedCount,
       totalEnrolled: students.length, students,
+      deviceMismatches: totalMismatches,
     });
   } catch (err) {
     console.error('Monitoring error:', err);

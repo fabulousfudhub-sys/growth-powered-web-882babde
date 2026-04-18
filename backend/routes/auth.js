@@ -366,6 +366,12 @@ router.post('/student/login', async (req, res) => {
       return res.status(401).json({ error: 'You have already taken this exam' });
     }
     if (fingerprint && attempts[0].device_fingerprint && attempts[0].device_fingerprint !== fingerprint) {
+      await logAudit({
+        userId: student.id, userName: student.name, role: 'student',
+        action: 'Device Mismatch', category: 'security',
+        details: `Blocked login for ${student.name} on exam ${pin.title}. Locked device: ${attempts[0].device_fingerprint.slice(0,8)}…, attempted device: ${fingerprint.slice(0,8)}… | examId:${pin.exam_id} | studentId:${student.id}`,
+        ip: req.ip,
+      });
       return res.status(403).json({ error: 'This exam is locked to another device. Contact your invigilator.' });
     }
 
