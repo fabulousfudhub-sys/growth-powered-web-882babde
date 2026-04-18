@@ -660,7 +660,7 @@ export const api = {
   },
   async submitExam(
     attemptId: string,
-  ): Promise<{ score: number; total: number }> {
+  ): Promise<{ score?: number; total?: number; showResult?: boolean; submitted?: boolean }> {
     await flushPendingAnswers();
     return request("/api/answers/submit", {
       method: "POST",
@@ -827,8 +827,17 @@ export const api = {
   },
 
   // License
-  async getLicenseStatus(): Promise<{ active: boolean; licenseKey: string | null; expiresAt: string | null }> {
+  async getLicenseStatus(): Promise<{ active: boolean; licenseKey: string | null; expiresAt: string | null; expired?: boolean }> {
     return request("/api/license/status");
+  },
+  async getPublicLicenseStatus(): Promise<{ active: boolean; expired: boolean; expiresAt: string | null; licenseKey: string | null }> {
+    return request("/api/license/public-status");
+  },
+  async activateLicensePublic(licenseKey: string): Promise<void> {
+    await request("/api/license/public-activate", {
+      method: "POST",
+      body: JSON.stringify({ licenseKey }),
+    });
   },
   async activateLicense(licenseKey: string): Promise<void> {
     await request("/api/license/activate", {
