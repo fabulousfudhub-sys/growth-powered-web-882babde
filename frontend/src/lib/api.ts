@@ -38,6 +38,7 @@ export type ApiConnectivityRoute =
   | "local_backend"
   | "unknown";
 export const API_ROUTE_CHANGED_EVENT = "cbt-api-route-changed";
+export const LICENSE_REQUIRED_EVENT = "cbt-license-required";
 
 function getApiBases(): string[] {
   const uniqueBases = Array.from(
