@@ -33,6 +33,7 @@ import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { LICENSE_REQUIRED_EVENT } from "@/lib/api";
 import LicenseActivationPage from "@/components/LicenseActivationPage";
 
 const queryClient = new QueryClient();
@@ -71,7 +72,13 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
     // Periodically re-validate license (every 5 min). If it expires while the
     // app is open, the user is bumped back to the activation screen.
     const t = setInterval(check, 5 * 60 * 1000);
-    return () => clearInterval(t);
+    // Any API call returning 402 (license required) triggers a re-check
+    const onLicenseRequired = () => check();
+    window.addEventListener(LICENSE_REQUIRED_EVENT, onLicenseRequired);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener(LICENSE_REQUIRED_EVENT, onLicenseRequired);
+    };
   }, [check]);
 
   if (!loaded) {
