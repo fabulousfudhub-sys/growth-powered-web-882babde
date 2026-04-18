@@ -25,7 +25,11 @@ import {
   GraduationCap,
   Lock,
 } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import ExamTimer from "@/components/exam/ExamTimer";
 import QuestionRenderer from "@/components/exam/QuestionRenderer";
 import QuestionNavigation from "@/components/exam/QuestionNavigation";
@@ -262,6 +266,16 @@ export default function StudentExamPortal() {
   const beginExam = async () => {
     if (!activeExam || !examAttemptId) return;
 
+    // 🔥 ENTER FULLSCREEN FIRST
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (err) {
+      alert("Please allow fullscreen to start the exam.");
+      return;
+    }
+
     if (isResuming && questions.length > 0) {
       // Resume — questions and answers already loaded, timer already calculated
       setPhase("exam");
@@ -329,9 +343,11 @@ export default function StudentExamPortal() {
   const isLastQuestion = currentQ === questions.length - 1;
 
   // Submit restrictions: 80% answered + 50% time elapsed
-  const answeredPercent = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
+  const answeredPercent =
+    questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
   const timeElapsed = totalDuration - timeLeft;
-  const timeElapsedPercent = totalDuration > 0 ? (timeElapsed / totalDuration) * 100 : 0;
+  const timeElapsedPercent =
+    totalDuration > 0 ? (timeElapsed / totalDuration) * 100 : 0;
   const canSubmit = answeredPercent >= 80 && timeElapsedPercent >= 50;
   const submitDisabledReason = !canSubmit
     ? answeredPercent < 80 && timeElapsedPercent < 50
@@ -586,7 +602,10 @@ export default function StudentExamPortal() {
                             </Button>
                           </span>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs text-center">
+                        <TooltipContent
+                          side="top"
+                          className="max-w-xs text-center"
+                        >
                           <p>{submitDisabledReason}</p>
                         </TooltipContent>
                       </Tooltip>
