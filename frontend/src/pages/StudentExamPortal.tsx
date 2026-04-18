@@ -48,6 +48,7 @@ export default function StudentExamPortal() {
   const [score, setScore] = useState<{ score: number; total: number } | null>(
     null,
   );
+  const [showScore, setShowScore] = useState<boolean>(true);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [showWarningDialog, setShowWarningDialog] = useState(false);
   const [unansweredCount, setUnansweredCount] = useState(0);
@@ -96,7 +97,14 @@ export default function StudentExamPortal() {
     stopAutoSave();
     try {
       const result = await api.submitExam(examAttemptId);
-      setScore(result);
+      // Server returns { showResult: false, submitted: true } when admin disabled display
+      if (result.showResult === false) {
+        setShowScore(false);
+        setScore(null);
+      } else if (typeof result.score === "number" && typeof result.total === "number") {
+        setShowScore(true);
+        setScore({ score: result.score, total: result.total });
+      }
     } catch {}
     setPhase("submitted");
     // Stop status polling
