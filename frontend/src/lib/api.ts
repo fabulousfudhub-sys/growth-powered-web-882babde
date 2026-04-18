@@ -38,6 +38,7 @@ export type ApiConnectivityRoute =
   | "local_backend"
   | "unknown";
 export const API_ROUTE_CHANGED_EVENT = "cbt-api-route-changed";
+export const LICENSE_REQUIRED_EVENT = "cbt-license-required";
 
 function getApiBases(): string[] {
   const uniqueBases = Array.from(
@@ -155,6 +156,10 @@ async function requestWithBase<T>(
     const err = await res
       .json()
       .catch(() => ({ error: res.statusText || "Request failed" }));
+    // 402 = License required → notify the app so it can show the activation page.
+    if (res.status === 402 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(LICENSE_REQUIRED_EVENT));
+    }
     throw buildError(err.error || "Request failed", res.status);
   }
 
@@ -575,6 +580,12 @@ export const api = {
       body: JSON.stringify({ studentId }),
     });
   },
+  async unlockExamDevice(examId: string, studentId: string): Promise<{ cleared: number }> {
+    return request(`/api/exams/${examId}/unlock-device`, {
+      method: "POST",
+      body: JSON.stringify({ studentId }),
+    });
+  },
   async forceSubmitAttempt(
     attemptId: string,
   ): Promise<{ score: number; total: number }> {
@@ -654,7 +665,7 @@ export const api = {
   },
   async submitExam(
     attemptId: string,
-  ): Promise<{ score: number; total: number }> {
+  ): Promise<{ score?: number; total?: number; showResult?: boolean; submitted?: boolean }> {
     await flushPendingAnswers();
     return request("/api/answers/submit", {
       method: "POST",
@@ -821,8 +832,17 @@ export const api = {
   },
 
   // License
-  async getLicenseStatus(): Promise<{ active: boolean; licenseKey: string | null; expiresAt: string | null }> {
+  async getLicenseStatus(): Promise<{ active: boolean; licenseKey: string | null; expiresAt: string | null; expired?: boolean }> {
     return request("/api/license/status");
+  },
+  async getPublicLicenseStatus(): Promise<{ active: boolean; expired: boolean; expiresAt: string | null; licenseKey: string | null }> {
+    return request("/api/license/public-status");
+  },
+  async activateLicensePublic(licenseKey: string): Promise<void> {
+    await request("/api/license/public-activate", {
+      method: "POST",
+      body: JSON.stringify({ licenseKey }),
+    });
   },
   async activateLicense(licenseKey: string): Promise<void> {
     await request("/api/license/activate", {

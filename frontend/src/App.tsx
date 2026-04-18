@@ -31,10 +31,70 @@ import BackupsPage from "@/pages/admin/BackupsPage";
 import StudentExamPortal from "@/pages/StudentExamPortal";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { LICENSE_REQUIRED_EVENT } from "@/lib/api";
+import LicenseActivationPage from "@/components/LicenseActivationPage";
 
 const queryClient = new QueryClient();
+
+interface PublicLicenseStatus {
+  active: boolean;
+  expired: boolean;
+  expiresAt: string | null;
+  licenseKey: string | null;
+}
+
+/**
+ * Top-level license gate. Polls the backend's public license endpoint and
+ * blocks the entire app behind a license activation screen when the system
+ * is unlicensed or expired — even offline.
+ */
+function LicenseGate({ children }: { children: React.ReactNode }) {
+  const [status, setStatus] = useState<PublicLicenseStatus | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const check = useCallback(async () => {
+    try {
+      const s = await api.getPublicLicenseStatus();
+      setStatus(s);
+    } catch {
+      // Backend unreachable — assume locked so users see the activation page
+      // (they'll get the "Cannot reach server" warning inside).
+      setStatus({ active: false, expired: false, expiresAt: null, licenseKey: null });
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    check();
+    // Periodically re-validate license (every 5 min). If it expires while the
+    // app is open, the user is bumped back to the activation screen.
+    const t = setInterval(check, 5 * 60 * 1000);
+    // Any API call returning 402 (license required) triggers a re-check
+    const onLicenseRequired = () => check();
+    window.addEventListener(LICENSE_REQUIRED_EVENT, onLicenseRequired);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener(LICENSE_REQUIRED_EVENT, onLicenseRequired);
+    };
+  }, [check]);
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!status?.active) {
+    return <LicenseActivationPage status={status} onActivated={check} />;
+  }
+
+  return <>{children}</>;
+}
 
 function SystemGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -163,11 +223,13 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </AuthProvider>
+      <LicenseGate>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </AuthProvider>
+      </LicenseGate>
     </TooltipProvider>
   </QueryClientProvider>
 );

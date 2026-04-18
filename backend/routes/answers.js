@@ -92,17 +92,19 @@ router.post('/submit', authenticate, async (req, res) => {
     await client.query('BEGIN');
 
     const { rows: attempts } = await client.query(
-      `SELECT ea.*, e.total_marks, e.questions_to_answer
+      `SELECT ea.*, e.total_marks, e.questions_to_answer, e.show_result
        FROM exam_attempts ea JOIN exams e ON ea.exam_id = e.id WHERE ea.id = $1`,
       [attemptId]
     );
     if (attempts.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Attempt not found' }); }
     const attempt = attempts[0];
+    const showResult = attempt.show_result !== false;
 
-    // Already submitted — return existing score
+    // Already submitted — return existing score (or hide if showResult is OFF)
     if (attempt.status !== 'in_progress') {
       await client.query('ROLLBACK');
-      return res.json({ score: parseFloat(attempt.score || 0), total: parseFloat(attempt.total_marks) });
+      if (!showResult) return res.json({ submitted: true, showResult: false });
+      return res.json({ score: parseFloat(attempt.score || 0), total: parseFloat(attempt.total_marks), showResult: true });
     }
 
     const { rows: studentAnswers } = await client.query(
@@ -130,7 +132,10 @@ router.post('/submit', authenticate, async (req, res) => {
     );
 
     await client.query('COMMIT');
-    res.json({ score: Math.round(score * 100) / 100, total: parseFloat(attempt.total_marks) });
+    if (!showResult) {
+      return res.json({ submitted: true, showResult: false });
+    }
+    res.json({ score: Math.round(score * 100) / 100, total: parseFloat(attempt.total_marks), showResult: true });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Submit error:', err);

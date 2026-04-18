@@ -48,6 +48,7 @@ export default function StudentExamPortal() {
   const [score, setScore] = useState<{ score: number; total: number } | null>(
     null,
   );
+  const [showScore, setShowScore] = useState<boolean>(true);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [showWarningDialog, setShowWarningDialog] = useState(false);
   const [unansweredCount, setUnansweredCount] = useState(0);
@@ -96,7 +97,14 @@ export default function StudentExamPortal() {
     stopAutoSave();
     try {
       const result = await api.submitExam(examAttemptId);
-      setScore(result);
+      // Server returns { showResult: false, submitted: true } when admin disabled display
+      if (result.showResult === false) {
+        setShowScore(false);
+        setScore(null);
+      } else if (typeof result.score === "number" && typeof result.total === "number") {
+        setShowScore(true);
+        setScore({ score: result.score, total: result.total });
+      }
     } catch {}
     setPhase("submitted");
     // Stop status polling
@@ -113,12 +121,17 @@ export default function StudentExamPortal() {
       try {
         const status = await api.checkAttemptStatus(examAttemptId);
         if (status.status === "submitted" || status.status === "graded") {
-          // Admin force-submitted or exam was stopped
-          setScore(
-            status.score !== undefined
-              ? { score: status.score, total: status.total_marks || 0 }
-              : null,
-          );
+          // Admin force-submitted or exam was stopped — respect exam.showResult flag
+          if (activeExam?.showResult === false) {
+            setShowScore(false);
+            setScore(null);
+          } else {
+            setScore(
+              status.score !== undefined
+                ? { score: status.score, total: status.total_marks || 0 }
+                : null,
+            );
+          }
           setPhase("submitted");
           stopAutoSave();
           if (statusPollRef.current) clearInterval(statusPollRef.current);
@@ -701,7 +714,7 @@ export default function StudentExamPortal() {
             <p className="text-muted-foreground">
               Your answers have been recorded successfully.
             </p>
-            {score != null && activeExam.showResult !== false && (
+            {score != null && showScore && activeExam.showResult !== false && (
               <div className="p-4 rounded-lg bg-muted">
                 <p className="text-3xl font-bold text-foreground">
                   {score.score}/{score.total}
@@ -709,7 +722,7 @@ export default function StudentExamPortal() {
                 <p className="text-sm text-muted-foreground mt-1">Score</p>
               </div>
             )}
-            {activeExam.showResult === false && (
+            {(!showScore || activeExam.showResult === false) && (
               <div className="p-4 rounded-lg bg-muted">
                 <p className="text-sm text-muted-foreground">
                   Your result will be released by your instructor.
