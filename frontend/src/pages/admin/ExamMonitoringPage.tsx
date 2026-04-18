@@ -222,6 +222,11 @@ export default function ExamMonitoringPage() {
                           <Send className="w-3.5 h-3.5" /> Submit
                         </Button>
                       )}
+                      {s.deviceFingerprint && (
+                        <Button variant="ghost" size="sm" className="gap-1 text-accent" onClick={() => setUnlockStudent(s)} title="Unlock Device — allow login from a different machine">
+                          <Unlock className="w-3.5 h-3.5" /> Unlock
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" className="gap-1 text-warning" onClick={() => setResetStudent(s)} title="Reset/Allow Retry">
                         <RotateCcw className="w-3.5 h-3.5" /> Reset
                       </Button>
@@ -270,6 +275,25 @@ export default function ExamMonitoringPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleForceSubmit} disabled={submitting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Force Submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Unlock Device Dialog */}
+      <AlertDialog open={!!unlockStudent} onOpenChange={() => setUnlockStudent(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2"><Unlock className="w-5 h-5 text-accent" /> Unlock Student Device</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will <strong>clear the device lock</strong> for <strong>{unlockStudent?.studentName}</strong> ({unlockStudent?.regNumber}),
+              allowing them to log in from a different laptop. Use this only when a student legitimately needs to switch machines mid-exam
+              (e.g. hardware failure). The new device will be locked on next login.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleUnlockDevice} disabled={unlocking} className="bg-accent text-accent-foreground hover:bg-accent/90">
+              {unlocking && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Unlock Device
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
