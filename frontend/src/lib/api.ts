@@ -575,7 +575,11 @@ export const api = {
       body: JSON.stringify({ studentId }),
     });
   },
-  async forceSubmitAttempt(
+  async unlockExamDevice(examId: string, studentId: string): Promise<{ cleared: number }> {
+    return request(`/api/exams/${examId}/unlock-device`, {
+      method: "POST",
+      body: JSON.stringify({ studentId }),
+    });
     attemptId: string,
   ): Promise<{ score: number; total: number }> {
     return request(`/api/admin/force-submit/${attemptId}`, { method: "POST" });
