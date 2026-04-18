@@ -351,9 +351,10 @@ router.post('/student/login', async (req, res) => {
     const fingerprint = (req.body.deviceFingerprint || req.headers['x-device-fingerprint'] || '').toString().slice(0, 128) || null;
 
     // Create attempt — only allow status reset if previous was in_progress (never reset graded attempts).
+    // Cast $3 explicitly to VARCHAR so Postgres can resolve param type when fingerprint is null.
     const { rows: attempts } = await pool.query(
       `INSERT INTO exam_attempts (exam_id, student_id, started_at, device_fingerprint, device_locked_at)
-       VALUES ($1, $2, NULL, $3, CASE WHEN $3 IS NULL THEN NULL ELSE NOW() END)
+       VALUES ($1, $2, NULL, $3::varchar, CASE WHEN $3::varchar IS NULL THEN NULL ELSE NOW() END)
        ON CONFLICT (exam_id, student_id) DO UPDATE
          SET device_fingerprint = COALESCE(exam_attempts.device_fingerprint, EXCLUDED.device_fingerprint),
              device_locked_at = COALESCE(exam_attempts.device_locked_at, EXCLUDED.device_locked_at)
@@ -365,6 +366,12 @@ router.post('/student/login', async (req, res) => {
       return res.status(401).json({ error: 'You have already taken this exam' });
     }
     if (fingerprint && attempts[0].device_fingerprint && attempts[0].device_fingerprint !== fingerprint) {
+      await logAudit({
+        userId: student.id, userName: student.name, role: 'student',
+        action: 'Device Mismatch', category: 'security',
+        details: `Blocked login for ${student.name} on exam ${pin.title}. Locked device: ${attempts[0].device_fingerprint.slice(0,8)}…, attempted device: ${fingerprint.slice(0,8)}… | examId:${pin.exam_id} | studentId:${student.id}`,
+        ip: req.ip,
+      });
       return res.status(403).json({ error: 'This exam is locked to another device. Contact your invigilator.' });
     }
 

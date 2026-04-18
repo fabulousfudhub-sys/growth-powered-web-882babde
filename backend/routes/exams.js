@@ -400,6 +400,7 @@ router.get('/:id/monitoring', authenticate, requireRole('super_admin', 'admin', 
 
     const { rows: attempts } = await pool.query(
       `SELECT ea.id, ea.student_id, ea.started_at, ea.status, ea.submitted_at, ea.score,
+              ea.device_fingerprint, ea.device_locked_at,
               u.name as student_name, u.reg_number,
               (SELECT COUNT(*) FROM answers WHERE attempt_id = ea.id) as answered_count
        FROM exam_attempts ea JOIN users u ON ea.student_id = u.id
@@ -407,6 +408,16 @@ router.get('/:id/monitoring', authenticate, requireRole('super_admin', 'admin', 
        ORDER BY ea.started_at DESC NULLS LAST`,
       [req.params.id]
     );
+
+    // Fetch device-mismatch audit events for this exam
+    const { rows: mismatchRows } = await pool.query(
+      `SELECT user_id, COUNT(*)::int as cnt, MAX(created_at) as last_at
+       FROM audit_log
+       WHERE action = 'Device Mismatch' AND details LIKE $1
+       GROUP BY user_id`,
+      [`%examId:${req.params.id}%`]
+    );
+    const mismatchByStudent = new Map(mismatchRows.map(r => [r.user_id, { count: r.cnt, lastAt: r.last_at }]));
 
     const now = new Date();
     const students = attempts.map(a => {
@@ -421,23 +432,30 @@ router.get('/:id/monitoring', authenticate, requireRole('super_admin', 'admin', 
       const progress = exam.questions_to_answer > 0
         ? Math.round((parseInt(a.answered_count) / exam.questions_to_answer) * 100) : 0;
 
+      const mm = mismatchByStudent.get(a.student_id);
       return {
         attemptId: a.id, studentId: a.student_id, studentName: a.student_name,
         regNumber: a.reg_number, status: a.status, startedAt: a.started_at,
         submittedAt: a.submitted_at, score: a.score ? parseFloat(a.score) : null,
         answeredCount: parseInt(a.answered_count), totalQuestions: exam.questions_to_answer,
         progress, remainingSeconds,
+        deviceFingerprint: a.device_fingerprint || null,
+        deviceLockedAt: a.device_locked_at || null,
+        deviceMismatchCount: mm?.count || 0,
+        lastDeviceMismatchAt: mm?.lastAt || null,
       };
     });
 
     const activeCount = students.filter(s => s.status === 'in_progress').length;
     const submittedCount = students.filter(s => s.status === 'submitted' || s.status === 'graded').length;
+    const totalMismatches = students.reduce((sum, s) => sum + (s.deviceMismatchCount || 0), 0);
 
     res.json({
       examId: exam.id, examTitle: exam.title, course: exam.course_code,
       duration: exam.duration, totalQuestions: exam.questions_to_answer,
       activeStudents: activeCount, submittedStudents: submittedCount,
       totalEnrolled: students.length, students,
+      deviceMismatches: totalMismatches,
     });
   } catch (err) {
     console.error('Monitoring error:', err);
