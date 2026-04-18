@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Monitor, Users, Clock, CheckCircle, RefreshCw, RotateCcw, Loader2, Send, AlertTriangle, ShieldAlert, Smartphone } from 'lucide-react';
+import { ArrowLeft, Monitor, Users, Clock, CheckCircle, RefreshCw, RotateCcw, Loader2, Send, AlertTriangle, ShieldAlert, Smartphone, Unlock } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 
@@ -37,8 +37,10 @@ export default function ExamMonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [resetStudent, setResetStudent] = useState<MonitoringStudent | null>(null);
   const [submitStudent, setSubmitStudent] = useState<MonitoringStudent | null>(null);
+  const [unlockStudent, setUnlockStudent] = useState<MonitoringStudent | null>(null);
   const [resetting, setResetting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
 
   const isLabAdmin = user?.role === 'lab_admin';
 
@@ -75,6 +77,17 @@ export default function ExamMonitoringPage() {
       load();
     } catch (err: any) { toast.error(err.message || 'Failed to submit'); }
     finally { setSubmitting(false); setSubmitStudent(null); }
+  };
+
+  const handleUnlockDevice = async () => {
+    if (!unlockStudent || !examId) return;
+    setUnlocking(true);
+    try {
+      await api.unlockExamDevice(examId, unlockStudent.studentId);
+      toast.success(`Device unlocked for ${unlockStudent.studentName}. They can now log in from a different machine.`);
+      load();
+    } catch (err: any) { toast.error(err.message || 'Failed to unlock device'); }
+    finally { setUnlocking(false); setUnlockStudent(null); }
   };
 
   const statusBadge = (status: string) => {
