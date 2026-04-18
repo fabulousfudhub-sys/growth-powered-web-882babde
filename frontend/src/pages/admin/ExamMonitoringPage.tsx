@@ -8,13 +8,16 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Monitor, Users, Clock, CheckCircle, RefreshCw, RotateCcw, Loader2, Send, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Monitor, Users, Clock, CheckCircle, RefreshCw, RotateCcw, Loader2, Send, AlertTriangle, ShieldAlert, Smartphone } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 
 interface MonitoringStudent {
   attemptId: string; studentId: string; studentName: string; regNumber: string;
   status: string; startedAt: string; submittedAt: string | null; score: number | null;
   answeredCount: number; totalQuestions: number; progress: number; remainingSeconds: number;
+  deviceFingerprint?: string | null;
+  deviceLockedAt?: string | null;
 }
 
 interface MonitoringData {

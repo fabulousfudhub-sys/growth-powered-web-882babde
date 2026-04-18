@@ -193,6 +193,19 @@ export default function ExamsPage() {
                       {exam.status === 'active' ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                     </Button>
                   )}
+                  {exam.status === 'completed' && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-success"
+                      onClick={async () => {
+                        try {
+                          await api.updateExamStatus(exam.id, 'active');
+                          toast.success('Exam re-started. Students can resume.');
+                          load();
+                        } catch (err: any) { toast.error(err?.message || 'Failed to restart'); }
+                      }}
+                      title="Restart Exam">
+                      <Play className="w-4 h-4" />
+                    </Button>
+                  )}
 
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPreviewExam(exam)} title="Preview">
                     <Eye className="w-4 h-4" />
