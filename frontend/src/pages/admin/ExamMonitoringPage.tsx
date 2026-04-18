@@ -24,6 +24,7 @@ interface MonitoringData {
   examId: string; examTitle: string; course: string; duration: number; totalQuestions: number;
   activeStudents: number; submittedStudents: number; totalEnrolled: number;
   students: MonitoringStudent[];
+  deviceMismatches?: number;
 }
 
 export default function ExamMonitoringPage() {
@@ -120,11 +121,16 @@ export default function ExamMonitoringPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="border-border/40">
+        <Card className={`border-border/40 ${(data.deviceMismatches || 0) > 0 ? 'border-destructive/50 bg-destructive/5' : ''}`}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center"><Clock className="w-5 h-5 text-warning" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{data.duration} min</p><p className="text-xs text-muted-foreground">Duration</p></div>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${(data.deviceMismatches || 0) > 0 ? 'bg-destructive/10' : 'bg-warning/10'}`}>
+                <ShieldAlert className={`w-5 h-5 ${(data.deviceMismatches || 0) > 0 ? 'text-destructive' : 'text-warning'}`} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{data.deviceMismatches || 0}</p>
+                <p className="text-xs text-muted-foreground">Device Mismatches</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -137,44 +143,79 @@ export default function ExamMonitoringPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Student</TableHead><TableHead>Matric No.</TableHead><TableHead>Status</TableHead>
-                <TableHead>Progress</TableHead><TableHead>Remaining</TableHead><TableHead>Score</TableHead>
+                <TableHead>Progress</TableHead><TableHead>Remaining</TableHead>
+                <TableHead>Device</TableHead>
+                <TableHead>Score</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.students.map(s => (
-                <TableRow key={s.attemptId}>
-                  <TableCell className="font-medium">{s.studentName}</TableCell>
-                  <TableCell className="font-mono text-sm">{s.regNumber}</TableCell>
-                  <TableCell>{statusBadge(s.status)}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2 min-w-[120px]">
-                      <Progress value={s.progress} className="h-2 flex-1" />
-                      <span className="text-xs text-muted-foreground w-12">{s.answeredCount}/{s.totalQuestions}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {s.status === 'in_progress' ? (
-                      <span className={`text-sm font-mono ${s.remainingSeconds < 300 ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
-                        {formatTime(s.remainingSeconds)}
-                      </span>
-                    ) : '—'}
-                  </TableCell>
-                  <TableCell>{s.score !== null ? `${s.score}` : '—'}</TableCell>
-                  <TableCell className="text-right space-x-1">
-                    {s.status === 'in_progress' && (
-                      <Button variant="ghost" size="sm" className="gap-1 text-primary" onClick={() => setSubmitStudent(s)} title="Force Submit">
-                        <Send className="w-3.5 h-3.5" /> Submit
+              <TooltipProvider>
+                {data.students.map(s => (
+                  <TableRow key={s.attemptId} className={(s.deviceMismatchCount || 0) > 0 ? 'bg-destructive/5' : ''}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-1.5">
+                        {s.studentName}
+                        {(s.deviceMismatchCount || 0) > 0 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <ShieldAlert className="w-4 h-4 text-destructive" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">{s.deviceMismatchCount} blocked login attempt{s.deviceMismatchCount! > 1 ? 's' : ''} from a different device</p>
+                              {s.lastDeviceMismatchAt && <p className="text-xs text-muted-foreground">Last: {new Date(s.lastDeviceMismatchAt).toLocaleString()}</p>}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{s.regNumber}</TableCell>
+                    <TableCell>{statusBadge(s.status)}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2 min-w-[120px]">
+                        <Progress value={s.progress} className="h-2 flex-1" />
+                        <span className="text-xs text-muted-foreground w-12">{s.answeredCount}/{s.totalQuestions}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {s.status === 'in_progress' ? (
+                        <span className={`text-sm font-mono ${s.remainingSeconds < 300 ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
+                          {formatTime(s.remainingSeconds)}
+                        </span>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {s.deviceFingerprint ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground">
+                              <Smartphone className="w-3 h-3" />
+                              {s.deviceFingerprint.slice(0, 8)}…
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs font-mono">{s.deviceFingerprint}</p>
+                            {s.deviceLockedAt && <p className="text-xs text-muted-foreground">Locked: {new Date(s.deviceLockedAt).toLocaleString()}</p>}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>{s.score !== null ? `${s.score}` : '—'}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                      {s.status === 'in_progress' && (
+                        <Button variant="ghost" size="sm" className="gap-1 text-primary" onClick={() => setSubmitStudent(s)} title="Force Submit">
+                          <Send className="w-3.5 h-3.5" /> Submit
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" className="gap-1 text-warning" onClick={() => setResetStudent(s)} title="Reset/Allow Retry">
+                        <RotateCcw className="w-3.5 h-3.5" /> Reset
                       </Button>
-                    )}
-                    <Button variant="ghost" size="sm" className="gap-1 text-warning" onClick={() => setResetStudent(s)} title="Reset/Allow Retry">
-                      <RotateCcw className="w-3.5 h-3.5" /> Reset
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TooltipProvider>
               {data.students.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No students have started the exam yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No students have started the exam yet</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
