@@ -351,9 +351,10 @@ router.post('/student/login', async (req, res) => {
     const fingerprint = (req.body.deviceFingerprint || req.headers['x-device-fingerprint'] || '').toString().slice(0, 128) || null;
 
     // Create attempt — only allow status reset if previous was in_progress (never reset graded attempts).
+    // Cast $3 explicitly to VARCHAR so Postgres can resolve param type when fingerprint is null.
     const { rows: attempts } = await pool.query(
       `INSERT INTO exam_attempts (exam_id, student_id, started_at, device_fingerprint, device_locked_at)
-       VALUES ($1, $2, NULL, $3, CASE WHEN $3 IS NULL THEN NULL ELSE NOW() END)
+       VALUES ($1, $2, NULL, $3::varchar, CASE WHEN $3::varchar IS NULL THEN NULL ELSE NOW() END)
        ON CONFLICT (exam_id, student_id) DO UPDATE
          SET device_fingerprint = COALESCE(exam_attempts.device_fingerprint, EXCLUDED.device_fingerprint),
              device_locked_at = COALESCE(exam_attempts.device_locked_at, EXCLUDED.device_locked_at)

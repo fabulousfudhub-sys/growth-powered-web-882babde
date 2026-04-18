@@ -400,6 +400,7 @@ router.get('/:id/monitoring', authenticate, requireRole('super_admin', 'admin', 
 
     const { rows: attempts } = await pool.query(
       `SELECT ea.id, ea.student_id, ea.started_at, ea.status, ea.submitted_at, ea.score,
+              ea.device_fingerprint, ea.device_locked_at,
               u.name as student_name, u.reg_number,
               (SELECT COUNT(*) FROM answers WHERE attempt_id = ea.id) as answered_count
        FROM exam_attempts ea JOIN users u ON ea.student_id = u.id
@@ -427,6 +428,8 @@ router.get('/:id/monitoring', authenticate, requireRole('super_admin', 'admin', 
         submittedAt: a.submitted_at, score: a.score ? parseFloat(a.score) : null,
         answeredCount: parseInt(a.answered_count), totalQuestions: exam.questions_to_answer,
         progress, remainingSeconds,
+        deviceFingerprint: a.device_fingerprint || null,
+        deviceLockedAt: a.device_locked_at || null,
       };
     });
 
