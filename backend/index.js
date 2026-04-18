@@ -40,6 +40,10 @@ app.use((req, _res, next) => {
   next();
 });
 
+// 🔒 LICENSE ENFORCEMENT — must run before all /api/* routes (but after CORS + JSON).
+// Allows only license and health endpoints when system is unlicensed/expired.
+app.use('/api', enforceLicense);
+
 // NOTE: enforceSystemLock is applied per-route AFTER `authenticate`
 // (mounted inside individual route files) so that login endpoints stay reachable.
 
@@ -142,16 +146,15 @@ async function runExamScheduler() {
 
 
 async function start() {
-  // 🔒 LICENSE CHECK FIRST
+  // 🔒 LICENSE STATUS — log only; the actual enforcement is via middleware so the
+  // server can boot and serve the License Activation page even when unlicensed.
   const licenseKey = getCachedLicense();
-
-  if (!licenseKey) {
-    console.error("\n❌ No valid license found. CBT is LOCKED.");
-    console.error("👉 Please activate the system with a valid license.\n");
-    process.exit(1);
+  if (licenseKey) {
+    console.log('✅ License valid. Starting CBT server...\n');
+  } else {
+    console.warn('⚠️  No valid license found. Server will start in LOCKED mode.');
+    console.warn('    Only /api/license/* endpoints are reachable until activated.\n');
   }
-
-  console.log("✅ License valid. Starting CBT server...\n");
 
   // Continue normal startup
   await testConnection();
@@ -171,6 +174,9 @@ async function start() {
   // Background services
   startSyncService();
   try { startAutoBackup(); } catch (e) { console.warn('[BACKUP] startAutoBackup error:', e.message); }
+
+  // Periodically re-validate license against optional remote server
+  startPeriodicCheck();
 
   setInterval(runExamScheduler, 30000);
   runExamScheduler();
