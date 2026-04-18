@@ -709,7 +709,7 @@ export default function StudentExamPortal() {
             <p className="text-muted-foreground">
               Your answers have been recorded successfully.
             </p>
-            {score != null && activeExam.showResult !== false && (
+            {score != null && showScore && activeExam.showResult !== false && (
               <div className="p-4 rounded-lg bg-muted">
                 <p className="text-3xl font-bold text-foreground">
                   {score.score}/{score.total}
@@ -717,7 +717,7 @@ export default function StudentExamPortal() {
                 <p className="text-sm text-muted-foreground mt-1">Score</p>
               </div>
             )}
-            {activeExam.showResult === false && (
+            {(!showScore || activeExam.showResult === false) && (
               <div className="p-4 rounded-lg bg-muted">
                 <p className="text-sm text-muted-foreground">
                   Your result will be released by your instructor.
