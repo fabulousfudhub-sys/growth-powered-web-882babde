@@ -3,6 +3,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
+import { AlertTriangle } from "lucide-react";
 import {
   getSiteSettings,
   getCachedSiteSettings,
@@ -11,6 +12,7 @@ import {
 import {
   API_ROUTE_CHANGED_EVENT,
   getApiRouteStatus,
+  api,
   type ApiConnectivityRoute,
 } from "@/lib/api";
 
