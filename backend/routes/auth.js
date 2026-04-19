@@ -29,7 +29,9 @@ async function autoSubmitAttempt(attemptId, client) {
     );
 
     const totalMarks = parseFloat(attempt.total_marks) || 0;
-    const hasPerQMarks = studentAnswers.some(sa => parseFloat(sa.marks) > 0);
+    // Uniform per-question marks: total_marks / questions_to_answer.
+    // No per-question scoring — MCQ/T-F/etc. all carry the same weight.
+    // Essays/short-answer use the same allotment but are graded manually later.
     const evenSplit = attempt.questions_to_answer > 0 ? totalMarks / attempt.questions_to_answer : 0;
 
     let earned = 0;
@@ -37,7 +39,7 @@ async function autoSubmitAttempt(attemptId, client) {
     const requiresGradingIds = [];
 
     for (const sa of studentAnswers) {
-      const qMarks = hasPerQMarks ? (parseFloat(sa.marks) || 0) : evenSplit;
+      const qMarks = evenSplit;
 
       if (sa.type === 'essay' || sa.type === 'short_answer') {
         pendingManual += qMarks;
@@ -405,13 +407,24 @@ router.post('/student/login', async (req, res) => {
 router.get('/attempt-status/:attemptId', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT ea.status, ea.score, ea.total_marks, ea.submitted_at, e.status as exam_status
+      `SELECT ea.status, ea.score, ea.total_marks, ea.submitted_at,
+              e.status as exam_status, e.show_result
        FROM exam_attempts ea JOIN exams e ON ea.exam_id = e.id
        WHERE ea.id = $1 AND ea.student_id = $2`,
       [req.params.attemptId, req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    res.json(rows[0]);
+    const row = rows[0];
+    const showResult = row.show_result !== false;
+    res.json({
+      status: row.status,
+      submitted_at: row.submitted_at,
+      exam_status: row.exam_status,
+      showResult,
+      // Strip score/total when admin disabled result display
+      score: showResult ? row.score : undefined,
+      total_marks: showResult ? row.total_marks : undefined,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed' });
   }
