@@ -44,6 +44,35 @@ export default function AdminLayout({
   const { user } = useAuth();
   const [site, setSite] = useState<SiteSettings>(getCachedSiteSettings());
   const [apiRoute, setApiRoute] = useState(getApiRouteStatus());
+  const [licenseExpiresAt, setLicenseExpiresAt] = useState<string | null>(null);
+
+  // Poll license status every 10 minutes (super_admin only sees the banner)
+  useEffect(() => {
+    if (user?.role !== "super_admin") return;
+    let mounted = true;
+    const refresh = () =>
+      api
+        .getPublicLicenseStatus()
+        .then((s) => mounted && setLicenseExpiresAt(s.expiresAt))
+        .catch(() => {});
+    refresh();
+    const t = setInterval(refresh, 10 * 60 * 1000);
+    return () => {
+      mounted = false;
+      clearInterval(t);
+    };
+  }, [user?.role]);
+
+  const licenseDaysLeft = (() => {
+    if (!licenseExpiresAt) return null;
+    const ms = new Date(licenseExpiresAt).getTime() - Date.now();
+    if (Number.isNaN(ms)) return null;
+    return Math.ceil(ms / (1000 * 60 * 60 * 24));
+  })();
+  const showLicenseBanner =
+    user?.role === "super_admin" &&
+    licenseDaysLeft !== null &&
+    licenseDaysLeft <= 7;
 
   useEffect(() => {
     getSiteSettings().then(setSite);
