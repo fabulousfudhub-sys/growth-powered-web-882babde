@@ -56,6 +56,163 @@ function getSupabase() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
+function maskLicenseKey(licenseKey: string | null | undefined) {
+  if (!licenseKey) return null;
+  if (licenseKey.length <= 8) return "****";
+  return `${licenseKey.slice(0, 4)}****${licenseKey.slice(-4)}`;
+}
+
+function readLicenseStatus(settings: Record<string, any> | null | undefined) {
+  const cache = settings?.licenseCache as
+    | { licenseKey?: string; expiresAt?: string | null; lastChecked?: string | null }
+    | undefined;
+
+  if (!cache?.licenseKey) {
+    return {
+      active: false,
+      expired: false,
+      expiresAt: null,
+      licenseKey: null,
+      lastChecked: null,
+    };
+  }
+
+  if (!cache.expiresAt) {
+    return {
+      active: true,
+      expired: false,
+      expiresAt: null,
+      licenseKey: maskLicenseKey(cache.licenseKey),
+      lastChecked: cache.lastChecked || null,
+    };
+  }
+
+  const expired = new Date(cache.expiresAt).getTime() <= Date.now();
+  return {
+    active: !expired,
+    expired,
+    expiresAt: cache.expiresAt,
+    licenseKey: maskLicenseKey(cache.licenseKey),
+    lastChecked: cache.lastChecked || null,
+  };
+}
+
+async function getStoredSettings(sb: ReturnType<typeof getSupabase>) {
+  const { data } = await sb.from("site_settings").select("settings").eq("id", 1).single();
+  return ((data?.settings as Record<string, any> | null) || {}) as Record<string, any>;
+}
+
+async function saveStoredSettings(sb: ReturnType<typeof getSupabase>, settings: Record<string, any>) {
+  await sb.from("site_settings").upsert(
+    { id: 1, settings, updated_at: new Date().toISOString() },
+    { onConflict: "id" },
+  );
+}
+
+function sanitizeSettings(settings: Record<string, any>) {
+  const { licenseCache, ...rest } = settings || {};
+  return rest;
+}
+
+async function validateLicenseKeyRecord(sb: ReturnType<typeof getSupabase>, licenseKey: string) {
+  const { data, error } = await sb.from("license_keys")
+    .select("license_key, active, expires_at")
+    .eq("license_key", licenseKey)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[license] validation error", error);
+    return { ok: false as const, status: 500, error: "Failed to validate license key" };
+  }
+
+  if (!data) {
+    return { ok: false as const, status: 400, error: "License key not found" };
+  }
+
+  if (!data.active) {
+    return { ok: false as const, status: 400, error: "License key has been revoked" };
+  }
+
+  if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) {
+    return { ok: false as const, status: 400, error: "License key has expired" };
+  }
+
+  return {
+    ok: true as const,
+    expiresAt: data.expires_at || null,
+    licenseKey: data.license_key,
+  };
+}
+
+async function handleLicense(method: string, path: string, body: any, user?: any) {
+  const sb = getSupabase();
+
+  if (method === "GET" && path === "/api/license/public-status") {
+    const settings = await getStoredSettings(sb);
+    const status = readLicenseStatus(settings);
+    return json({
+      active: status.active,
+      expired: status.expired,
+      expiresAt: status.expiresAt,
+      licenseKey: status.licenseKey,
+    });
+  }
+
+  if (method === "POST" && path === "/api/license/public-activate") {
+    const key = typeof body?.licenseKey === "string" ? body.licenseKey.trim() : "";
+    if (key.length < 4) return json({ error: "Invalid license key" }, 400);
+
+    const validation = await validateLicenseKeyRecord(sb, key);
+    if (!validation.ok) return json({ error: validation.error }, validation.status);
+
+    const settings = await getStoredSettings(sb);
+    settings.licenseCache = {
+      licenseKey: validation.licenseKey,
+      expiresAt: validation.expiresAt,
+      lastChecked: new Date().toISOString(),
+    };
+    await saveStoredSettings(sb, settings);
+    return json({ success: true, message: "License activated successfully" });
+  }
+
+  if (path.startsWith("/api/license/")) {
+    if (!user) return json({ error: "Unauthorized" }, 401);
+    if (user.role !== "super_admin") return json({ error: "Forbidden" }, 403);
+
+    if (method === "GET" && path === "/api/license/status") {
+      const settings = await getStoredSettings(sb);
+      const status = readLicenseStatus(settings);
+      return json(status);
+    }
+
+    if (method === "POST" && path === "/api/license/activate") {
+      const key = typeof body?.licenseKey === "string" ? body.licenseKey.trim() : "";
+      if (key.length < 4) return json({ error: "Invalid license key" }, 400);
+
+      const validation = await validateLicenseKeyRecord(sb, key);
+      if (!validation.ok) return json({ error: validation.error }, validation.status);
+
+      const settings = await getStoredSettings(sb);
+      settings.licenseCache = {
+        licenseKey: validation.licenseKey,
+        expiresAt: validation.expiresAt,
+        lastChecked: new Date().toISOString(),
+      };
+      await saveStoredSettings(sb, settings);
+      return json({ success: true, message: "License activated successfully" });
+    }
+
+    if (method === "POST" && path === "/api/license/deactivate") {
+      const settings = await getStoredSettings(sb);
+      delete settings.licenseCache;
+      await saveStoredSettings(sb, settings);
+      return json({ success: true, message: "License deactivated" });
+    }
+  }
+
+  return null;
+}
+
 // ───────────────────────── AUTH ROUTES ─────────────────────────
 
 async function handleStaffLogin(body: any) {
@@ -876,8 +1033,8 @@ async function handleSettings(method: string, path: string, body: any) {
   const sb = getSupabase();
 
   if (method === "GET" && path === "/api/settings") {
-    const { data } = await sb.from("site_settings").select("settings").eq("id", 1).single();
-    return json(data?.settings || {});
+    const settings = await getStoredSettings(sb);
+    return json(sanitizeSettings(settings));
   }
 
   if (method === "PUT" && path === "/api/settings") {
@@ -1098,6 +1255,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // PUBLIC routes (no auth)
     if (method === "POST" && path === "/api/auth/staff/login") return await handleStaffLogin(body);
     if (method === "POST" && path === "/api/auth/student/login") return await handleStudentLogin(body);
+    if (path.startsWith("/api/license/public-")) {
+      const r = await handleLicense(method, path, body);
+      return r ?? json({ error: "Not found" }, 404);
+    }
     if (method === "GET" && path === "/api/settings") {
       const r = await handleSettings("GET", path, body);
       return r ?? json({ error: "Not found" }, 404);
@@ -1112,6 +1273,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (!auth?.startsWith("Bearer ")) return json({ error: "No token" }, 401);
     const user = await verifyJWT(auth.slice(7));
     if (!user) return json({ error: "Invalid token" }, 401);
+
+    if (path.startsWith("/api/license/")) {
+      const r = await handleLicense(method, path, body, user);
+      return r ?? json({ error: "Not found" }, 404);
+    }
 
     // Auth routes
     if (method === "GET" && path === "/api/auth/me") return await handleMe(user);
