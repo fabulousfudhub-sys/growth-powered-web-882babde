@@ -121,16 +121,14 @@ export default function StudentExamPortal() {
       try {
         const status = await api.checkAttemptStatus(examAttemptId);
         if (status.status === "submitted" || status.status === "graded") {
-          // Admin force-submitted or exam was stopped — respect exam.showResult flag
-          if (activeExam?.showResult === false) {
+          // Trust server: it strips score when show_result is disabled
+          const allowShow = status.showResult !== false && activeExam?.showResult !== false;
+          if (!allowShow || status.score === undefined) {
             setShowScore(false);
             setScore(null);
           } else {
-            setScore(
-              status.score !== undefined
-                ? { score: status.score, total: status.total_marks || 0 }
-                : null,
-            );
+            setShowScore(true);
+            setScore({ score: status.score, total: status.total_marks || 0 });
           }
           setPhase("submitted");
           stopAutoSave();

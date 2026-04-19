@@ -325,6 +325,7 @@ export const api = {
     score?: number;
     total_marks?: number;
     exam_status?: string;
+    showResult?: boolean;
   }> {
     return request(`/api/auth/attempt-status/${attemptId}`);
   },
