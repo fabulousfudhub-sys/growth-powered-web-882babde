@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.swift-handler]
 verify_jwt = false
+
+[functions.validate-license]
+verify_jwt = false
