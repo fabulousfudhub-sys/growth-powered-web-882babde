@@ -356,7 +356,7 @@ export default function QuestionsPage() {
           }}
         />
       </div>
-      <ScrollArea className="max-h-[600px]">
+      <ScrollArea className="h-[600px] w-full">
         <div className="grid gap-3">
           {paginatedQuestions.map((q) => (
             <Card
