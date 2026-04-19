@@ -154,6 +154,22 @@ export default function AdminLayout({
               </div>
             </div>
           </header>
+          {showLicenseBanner && (
+            <div
+              className={`flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium border-b ${
+                licenseDaysLeft! <= 3
+                  ? "bg-destructive/10 text-destructive border-destructive/30"
+                  : "bg-warning/10 text-warning-foreground border-warning/30"
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                {licenseDaysLeft! <= 0
+                  ? "Your license has expired. The system will lock soon — renew immediately."
+                  : `License expires in ${licenseDaysLeft} day${licenseDaysLeft === 1 ? "" : "s"} — please renew to avoid lockout.`}
+              </span>
+            </div>
+          )}
           <main className="flex-1 overflow-auto p-6 lg:p-8">{children}</main>
         </div>
       </div>
