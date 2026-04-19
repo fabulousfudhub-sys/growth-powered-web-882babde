@@ -4,10 +4,16 @@ const path = require('path');
 const CACHE_PATH = path.join(__dirname, 'cache.json');
 const CACHE_DURATION_DAYS = 7;
 
-// Optional remote license server endpoint (set via env). When set, server periodically
-// re-validates the cached key against the remote endpoint to detect revocations.
-// Expected response: 200 { valid: true, expiresAt?: ISO8601 } | 200 { valid: false } | non-2xx for error.
-const REMOTE_VALIDATE_URL = process.env.LICENSE_VALIDATE_URL || '';
+// Default to the Supabase edge function shipped with this project. Can be
+// overridden via env (e.g. for staging or a self-hosted validator).
+const DEFAULT_VALIDATE_URL =
+  'https://ihgcgmyjvnexaqcluoay.supabase.co/functions/v1/validate-license';
+const REMOTE_VALIDATE_URL = process.env.LICENSE_VALIDATE_URL || DEFAULT_VALIDATE_URL;
+// Anon/publishable key for the edge function (no JWT verification, but Supabase
+// still requires the apikey header on hosted functions).
+const REMOTE_ANON_KEY =
+  process.env.LICENSE_VALIDATE_ANON_KEY ||
+  'sb_publishable_FSDU9eF_N8Jfm34yHLdBnw_5NZ0ea1l';
 
 function readCache() {
   if (!fs.existsSync(CACHE_PATH)) return null;
@@ -67,14 +73,29 @@ function clearLicense() {
 async function remoteValidate(licenseKey) {
   if (!REMOTE_VALIDATE_URL) return { reachable: false };
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (REMOTE_ANON_KEY) {
+      headers['apikey'] = REMOTE_ANON_KEY;
+      headers['Authorization'] = `Bearer ${REMOTE_ANON_KEY}`;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(REMOTE_VALIDATE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ licenseKey }),
+      signal: controller.signal,
     });
-    if (!res.ok) return { reachable: true, ok: false };
+    clearTimeout(timeout);
+    if (!res.ok) return { reachable: true, ok: false, status: res.status };
     const json = await res.json().catch(() => ({}));
-    return { reachable: true, ok: true, valid: !!json.valid, expiresAt: json.expiresAt || null };
+    return {
+      reachable: true,
+      ok: true,
+      valid: !!json.valid,
+      expiresAt: json.expiresAt || null,
+      reason: json.reason || null,
+    };
   } catch {
     return { reachable: false };
   }

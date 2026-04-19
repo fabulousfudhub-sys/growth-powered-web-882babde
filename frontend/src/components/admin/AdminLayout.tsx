@@ -3,6 +3,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
+import { AlertTriangle } from "lucide-react";
 import {
   getSiteSettings,
   getCachedSiteSettings,
@@ -11,6 +12,7 @@ import {
 import {
   API_ROUTE_CHANGED_EVENT,
   getApiRouteStatus,
+  api,
   type ApiConnectivityRoute,
 } from "@/lib/api";
 
@@ -42,6 +44,35 @@ export default function AdminLayout({
   const { user } = useAuth();
   const [site, setSite] = useState<SiteSettings>(getCachedSiteSettings());
   const [apiRoute, setApiRoute] = useState(getApiRouteStatus());
+  const [licenseExpiresAt, setLicenseExpiresAt] = useState<string | null>(null);
+
+  // Poll license status every 10 minutes (super_admin only sees the banner)
+  useEffect(() => {
+    if (user?.role !== "super_admin") return;
+    let mounted = true;
+    const refresh = () =>
+      api
+        .getPublicLicenseStatus()
+        .then((s) => mounted && setLicenseExpiresAt(s.expiresAt))
+        .catch(() => {});
+    refresh();
+    const t = setInterval(refresh, 10 * 60 * 1000);
+    return () => {
+      mounted = false;
+      clearInterval(t);
+    };
+  }, [user?.role]);
+
+  const licenseDaysLeft = (() => {
+    if (!licenseExpiresAt) return null;
+    const ms = new Date(licenseExpiresAt).getTime() - Date.now();
+    if (Number.isNaN(ms)) return null;
+    return Math.ceil(ms / (1000 * 60 * 60 * 24));
+  })();
+  const showLicenseBanner =
+    user?.role === "super_admin" &&
+    licenseDaysLeft !== null &&
+    licenseDaysLeft <= 7;
 
   useEffect(() => {
     getSiteSettings().then(setSite);
@@ -123,6 +154,22 @@ export default function AdminLayout({
               </div>
             </div>
           </header>
+          {showLicenseBanner && (
+            <div
+              className={`flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium border-b ${
+                licenseDaysLeft! <= 3
+                  ? "bg-destructive/10 text-destructive border-destructive/30"
+                  : "bg-warning/10 text-warning-foreground border-warning/30"
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                {licenseDaysLeft! <= 0
+                  ? "Your license has expired. The system will lock soon — renew immediately."
+                  : `License expires in ${licenseDaysLeft} day${licenseDaysLeft === 1 ? "" : "s"} — please renew to avoid lockout.`}
+              </span>
+            </div>
+          )}
           <main className="flex-1 overflow-auto p-6 lg:p-8">{children}</main>
         </div>
       </div>
