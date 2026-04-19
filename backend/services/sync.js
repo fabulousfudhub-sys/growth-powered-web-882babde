@@ -699,6 +699,12 @@ function startSyncService() {
       if (isOnline && !lastKnownOnline) {
         console.log('[SYNC] 🌐 Internet detected — auto-sync');
         lastKnownOnline = true;
+        // Refresh license against remote whenever we come back online so
+        // revocations / expiry extensions propagate immediately.
+        try {
+          const { periodicCheck } = require('../license/license');
+          periodicCheck().catch((e) => console.warn('[LICENSE] refresh on reconnect failed:', e.message));
+        } catch { /* license module optional */ }
         if (!isSyncing) syncNow().catch((e) => console.warn('[SYNC] auto-sync error:', e.message));
       } else if (!isOnline && lastKnownOnline) {
         console.log('[SYNC] 📴 Internet lost');
