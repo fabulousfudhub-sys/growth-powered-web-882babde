@@ -4,18 +4,18 @@
 const { getCachedLicense } = require('../license/license');
 
 // Paths that remain reachable while the system is unlicensed.
-const ALLOWED_WHEN_LOCKED = [
-  '/api/license/public-status',
-  '/api/license/public-activate',
-  '/api/license/status',
-  '/api/license/activate',
-  '/api/license/deactivate',
-  '/api/health',
-];
+const ALLOWED_WHEN_LOCKED = new Set([
+  '/license/public-status',
+  '/license/public-activate',
+  '/license/status',
+  '/license/activate',
+  '/license/deactivate',
+  '/health',
+]);
 
 function enforceLicense(req, res, next) {
-  // Allow license & health endpoints unconditionally
-  if (ALLOWED_WHEN_LOCKED.includes(req.path)) return next();
+  // Mounted at /api, so req.path here does not include the /api prefix.
+  if (ALLOWED_WHEN_LOCKED.has(req.path)) return next();
 
   // Allow CORS preflight
   if (req.method === 'OPTIONS') return next();
