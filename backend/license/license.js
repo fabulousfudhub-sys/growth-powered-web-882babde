@@ -73,14 +73,29 @@ function clearLicense() {
 async function remoteValidate(licenseKey) {
   if (!REMOTE_VALIDATE_URL) return { reachable: false };
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (REMOTE_ANON_KEY) {
+      headers['apikey'] = REMOTE_ANON_KEY;
+      headers['Authorization'] = `Bearer ${REMOTE_ANON_KEY}`;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(REMOTE_VALIDATE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ licenseKey }),
+      signal: controller.signal,
     });
-    if (!res.ok) return { reachable: true, ok: false };
+    clearTimeout(timeout);
+    if (!res.ok) return { reachable: true, ok: false, status: res.status };
     const json = await res.json().catch(() => ({}));
-    return { reachable: true, ok: true, valid: !!json.valid, expiresAt: json.expiresAt || null };
+    return {
+      reachable: true,
+      ok: true,
+      valid: !!json.valid,
+      expiresAt: json.expiresAt || null,
+      reason: json.reason || null,
+    };
   } catch {
     return { reachable: false };
   }
